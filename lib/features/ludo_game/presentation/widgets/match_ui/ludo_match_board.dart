@@ -36,9 +36,9 @@ class LudoMatchBoard extends StatefulWidget {
   /// Returns the dice value associated with a move.
   final int? Function(MoveOption) rollValueForMove;
 
-
   final AvailableRolls selectableRolls;
   final ValueChanged<int> onAvailableRollTap;
+
   /// Called when a specific legal move is selected.
   //final ValueChanged<MoveOption> onMoveTap;
 
@@ -121,8 +121,8 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
           return const SizedBox.shrink();
         }
 
-        final frame = (side * .031).clamp(7.0, 11.0).toDouble();
-        final innerSide = side - frame * 2;
+        final frame = (side * .017).clamp(3.0, 5.0).toDouble();
+        final innerSide = side - frame * 1.1;
 
         return Center(
           child: SizedBox.square(
@@ -155,12 +155,8 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                   _buildAnimatedToken(frame: frame, innerSide: innerSide),
                 if (widget.selectableRolls.isNotEmpty &&
                     widget.selectedTokenId != null)
-                  _buildSelectedTokenDice(
-                    frame: frame,
-                    innerSide: innerSide,
-                  ),
+                  _buildSelectedTokenDice(frame: frame, innerSide: innerSide),
               ],
-
             ),
           ),
         );
@@ -248,13 +244,13 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     final path = _pathFor(player.color);
     final geometry = LudoBoardGeometry.instance;
 
-// القطعة الموجودة في البيت ليس لها Position صالح على مسار اللعب.
-// نستخدم مكانها المرئي الحقيقي داخل Home Zone كبداية للأنيميشن.
+    // القطعة الموجودة في البيت ليس لها Position صالح على مسار اللعب.
+    // نستخدم مكانها المرئي الحقيقي داخل Home Zone كبداية للأنيميشن.
     final startPosition = move is ExitToken
         ? geometry.tokenHomePosition(
-      color: player.color,
-      tokenIndex: token.tokenIndex,
-    )
+            color: player.color,
+            tokenIndex: token.tokenIndex,
+          )
         : token.position;
 
     final positions = <Position>[startPosition];
@@ -591,6 +587,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       ),
     );
   }
+
   Widget _buildSelectedTokenDice({
     required double frame,
     required double innerSide,
@@ -625,8 +622,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     const spacing = 4.0;
 
     final rolls = widget.selectableRolls.rolls;
-    final totalWidth = rolls.length * dieSize +
-        (rolls.length - 1) * spacing;
+    final totalWidth = rolls.length * dieSize + (rolls.length - 1) * spacing;
 
     final geometry = LudoBoardGeometry.instance;
 
@@ -639,9 +635,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
       final position = token!.isInitial
           ? geometry.tokenHomePosition(
-        color: owner!.color,
-        tokenIndex: token.tokenIndex,
-      )
+              color: owner!.color,
+              tokenIndex: token.tokenIndex,
+            )
           : token.position;
 
       return geometry.cellCenter(position, innerSide);
@@ -665,8 +661,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           for (var index = 0; index < rolls.length; index++) ...[
-            if (index > 0)
-              const SizedBox(width: spacing),
+            if (index > 0) const SizedBox(width: spacing),
 
             Material(
               color: Colors.transparent,
@@ -674,9 +669,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                 borderRadius: BorderRadius.circular(7),
                 onTap: _animatingMove != null
                     ? null
-                    : () => widget.onAvailableRollTap(
-                  rolls[index].sequence,
-                ),
+                    : () => widget.onAvailableRollTap(rolls[index].sequence),
                 child: Container(
                   width: dieSize,
                   height: dieSize,
@@ -684,12 +677,12 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                     color: const Color(0xFF181321),
                     borderRadius: BorderRadius.circular(7),
                     border: Border.all(
-                      color: widget.selectedRollSequence ==
-                          rolls[index].sequence
+                      color:
+                          widget.selectedRollSequence == rolls[index].sequence
                           ? const Color(0xFFFFD166)
                           : color,
-                      width: widget.selectedRollSequence ==
-                          rolls[index].sequence
+                      width:
+                          widget.selectedRollSequence == rolls[index].sequence
                           ? 2
                           : 1.3,
                     ),
@@ -702,10 +695,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                     ],
                   ),
                   alignment: Alignment.center,
-                  child: MatchDieFace(
-                    value: rolls[index].value,
-                    size: 19,
-                  ),
+                  child: MatchDieFace(value: rolls[index].value, size: 19),
                 ),
               ),
             ),
