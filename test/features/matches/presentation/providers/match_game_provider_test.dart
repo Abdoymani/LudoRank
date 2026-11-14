@@ -278,13 +278,7 @@ void main() {
 
         // الخطأ محفوظ والتحميل انتهى.
         expect(provider.error, contains('تعذر استكمال المباراة'));
-        service.resumeMatchError = StateError(
-          'لا توجد Snapshot محفوظة للمباراة ${match.id}.',
-        );
 
-        await provider.resumeMatch(matchId: match.id);
-
-        expect(provider.error, isNot(contains('cannot resume')));
         expect(provider.isLoading, isFalse);
 
         // الاختيارات والحركات المؤقتة تم تنظيفها.
@@ -296,6 +290,29 @@ void main() {
         // لم يتم استدعاء startMatch مرة أخرى.
         expect(service.resumeMatchCallCount, 1);
         expect(service.startMatchCallCount, 1);
+      },
+    );
+    // =====================================================
+    // RESUME MATCH ERROR - NO SNAPSHOT
+    // =====================================================
+
+    test(
+      'resumeMatch shows friendly message when snapshot is missing',
+      () async {
+        service.resumeMatchError = StateError(
+          'لا توجد Snapshot محفوظة للمباراة ${match.id}.',
+        );
+
+        await provider.resumeMatch(matchId: match.id);
+
+        expect(provider.error, contains('لا توجد نسخة محفوظة من حالة اللعب'));
+
+        expect(provider.session, isNull);
+        expect(provider.matchStatus, isNull);
+        expect(provider.isLoading, isFalse);
+
+        expect(service.resumeMatchCallCount, 1);
+        expect(service.startMatchCallCount, 0);
       },
     );
     // ========================================================
