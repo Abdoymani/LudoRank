@@ -583,7 +583,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
             ),
           ],
         ),
-        child: const Icon(Icons.person, color: Color(0xFFFFF9EB), size: 20),
+        child: const Icon(Icons.person, color: Color(0xFFFFF9EB), size: 2),
       ),
     );
   }

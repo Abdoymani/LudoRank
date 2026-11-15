@@ -442,7 +442,7 @@ class _MatchBoardPainter extends CustomPainter {
       }
     }
 
-    final radius = cell * .355;
+    final radius = cell * .43;
     for (final group in groups.values) {
       for (var i = 0; i < group.length; i++) {
         final item = group[i];
