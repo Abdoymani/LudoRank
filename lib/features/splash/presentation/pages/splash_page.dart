@@ -14,18 +14,33 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage> {
+class _SplashPageState extends State<SplashPage>
+    with SingleTickerProviderStateMixin {
   static const Color navy = Color(0xFF06183A);
   static const Color gold = Color(0xFFD9B45F);
   static const Color frameGold = Color(0xFFAD805F);
 
   Timer? _navigationTimer;
+  late final AnimationController _logoAnimationController;
+  late final Animation<double> _logoFadeAnimation;
 
   @override
   void initState() {
     super.initState();
 
-    _navigationTimer = Timer(const Duration(seconds: 60), () {
+    _logoAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _logoFadeAnimation = CurvedAnimation(
+      parent: _logoAnimationController,
+      curve: Curves.easeIn,
+    );
+
+    _logoAnimationController.forward();
+
+    _navigationTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
         context.go(AppRoutes.home);
       }
@@ -35,6 +50,7 @@ class _SplashPageState extends State<SplashPage> {
   @override
   void dispose() {
     _navigationTimer?.cancel();
+    _logoAnimationController.dispose();
     super.dispose();
   }
 
@@ -54,7 +70,7 @@ class _SplashPageState extends State<SplashPage> {
             builder: (context, constraints) {
               final double logoWidth = math.min(
                 constraints.maxWidth * 0.72,
-                190,
+                155,
               );
 
               final double gameLogoSize = math.min(
@@ -74,10 +90,13 @@ class _SplashPageState extends State<SplashPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         // Iso Developers brand
-                        Image.asset(
-                          'assets/images/branding/iso_developers.png',
-                          width: logoWidth,
-                          fit: BoxFit.contain,
+                        FadeTransition(
+                          opacity: _logoFadeAnimation,
+                          child: Image.asset(
+                            'assets/images/branding/iso_developers.png',
+                            width: logoWidth,
+                            fit: BoxFit.contain,
+                          ),
                         ),
 
                         const SizedBox(height: 28),
