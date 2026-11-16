@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
@@ -65,9 +64,7 @@ abstract final class AppTheme {
           ? const Color(0xFF303B50)
           : const Color(0xFFE8EDF5),
       onSecondaryContainer: text,
-      tertiary: isDark
-          ? const Color(0xFF8DB8F5)
-          : const Color(0xFF356FB8),
+      tertiary: isDark ? const Color(0xFF8DB8F5) : const Color(0xFF356FB8),
       onTertiary: Colors.white,
       errorContainer: isDark
           ? const Color(0xFF542B32)
@@ -79,12 +76,8 @@ abstract final class AppTheme {
       outlineVariant: border,
       shadow: Colors.black,
       scrim: Colors.black54,
-      inverseSurface: isDark
-          ? AppColors.lightSurface
-          : AppColors.darkSurface,
-      onInverseSurface: isDark
-          ? AppColors.lightText
-          : AppColors.darkText,
+      inverseSurface: isDark ? AppColors.lightSurface : AppColors.darkSurface,
+      onInverseSurface: isDark ? AppColors.lightText : AppColors.darkText,
       inversePrimary: AppColors.goldDark,
       surfaceTint: AppColors.gold,
     );
@@ -114,16 +107,10 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         color: surface,
         elevation: isDark ? 1 : 0,
-        margin: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 6,
-        ),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: border,
-            width: 1,
-          ),
+          side: BorderSide(color: border, width: 1),
         ),
         surfaceTintColor: Colors.transparent,
       ),
@@ -150,18 +137,9 @@ abstract final class AppTheme {
           fontSize: 16,
           fontWeight: FontWeight.w600,
         ),
-        bodyLarge: TextStyle(
-          color: text,
-          fontSize: 16,
-        ),
-        bodyMedium: TextStyle(
-          color: secondaryText,
-          fontSize: 14,
-        ),
-        bodySmall: TextStyle(
-          color: secondaryText,
-          fontSize: 12,
-        ),
+        bodyLarge: TextStyle(color: text, fontSize: 16),
+        bodyMedium: TextStyle(color: secondaryText, fontSize: 14),
+        bodySmall: TextStyle(color: secondaryText, fontSize: 12),
       ),
 
       // Elevated Buttons
@@ -171,17 +149,11 @@ abstract final class AppTheme {
           foregroundColor: AppColors.navy,
           elevation: 0,
           minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
         ),
       ),
 
@@ -219,10 +191,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: AppColors.gold,
-            width: 1.5,
-          ),
+          borderSide: const BorderSide(color: AppColors.gold, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -231,11 +200,7 @@ abstract final class AppTheme {
       ),
 
       // Dividers
-      dividerTheme: DividerThemeData(
-        color: border,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme: DividerThemeData(color: border, thickness: 1, space: 1),
 
       // Floating Action Button
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -257,10 +222,7 @@ abstract final class AppTheme {
           fontSize: 20,
           fontWeight: FontWeight.bold,
         ),
-        contentTextStyle: TextStyle(
-          color: secondaryText,
-          fontSize: 14,
-        ),
+        contentTextStyle: TextStyle(color: secondaryText, fontSize: 14),
       ),
 
       // Snackbars
@@ -268,14 +230,9 @@ abstract final class AppTheme {
         backgroundColor: isDark
             ? const Color(0xFF26334A)
             : const Color(0xFF26334A),
-        contentTextStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-        ),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
 
       // Icons
@@ -285,9 +242,7 @@ abstract final class AppTheme {
       listTileTheme: ListTileThemeData(
         iconColor: secondaryText,
         textColor: text,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

@@ -16,9 +16,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 class AppProviders {
   static final providers = [
     ChangeNotifierProvider<ThemeController>(
-      create: (_) => ThemeController(
-        settingsBox: Hive.box('app_settings'),
-      ),
+      create: (_) => ThemeController(settingsBox: Hive.box('app_settings')),
     ),
     ChangeNotifierProvider<HomeProvider>(create: (_) => sl<HomeProvider>()),
     ChangeNotifierProvider<PlayerProvider>(create: (_) => sl<PlayerProvider>()),

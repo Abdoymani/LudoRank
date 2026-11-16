@@ -50,9 +50,7 @@ class PrototypePlayerSection extends StatelessWidget {
             : null,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: isCurrent
-              ? color
-              : color.withValues(alpha: 0.42),
+          color: isCurrent ? color : color.withValues(alpha: 0.42),
           width: isCurrent ? 2.1 : 1.05,
         ),
         boxShadow: isCurrent

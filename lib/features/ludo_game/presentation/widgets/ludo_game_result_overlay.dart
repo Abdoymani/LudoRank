@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
@@ -110,12 +109,12 @@ class LudoGameResultOverlay extends StatelessWidget {
                         onPressed: isLoading ? null : onRetry,
                         icon: isLoading
                             ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.sync),
                         label: Text(
                           isLoading
@@ -168,7 +167,7 @@ class _ResultsList extends StatelessWidget {
             child: _ResultRow(
               player: player,
               displayName:
-              playerNames[player.playerId] ?? 'اللاعب ${player.seat}',
+                  playerNames[player.playerId] ?? 'اللاعب ${player.seat}',
               color: playerColors[player.playerId],
             ),
           ),
@@ -212,14 +211,10 @@ class _ResultRow extends StatelessWidget {
           CircleAvatar(
             radius: 17,
             backgroundColor: playerColor,
-            foregroundColor: isYellow
-                ? const Color(0xFF21182B)
-                : Colors.white,
+            foregroundColor: isYellow ? const Color(0xFF21182B) : Colors.white,
             child: Text(
               '${player.rank ?? "-"}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
 
@@ -278,7 +273,8 @@ class _EngineResultsList extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: _EngineResultRow(
               rank: result.rank,
-              displayName: playerNames[result.playerId] ??
+              displayName:
+                  playerNames[result.playerId] ??
                   _fallbackName(result.playerId),
               color: playerColors[result.playerId],
             ),
@@ -333,14 +329,10 @@ class _EngineResultRow extends StatelessWidget {
           CircleAvatar(
             radius: 17,
             backgroundColor: playerColor,
-            foregroundColor: isYellow
-                ? const Color(0xFF21182B)
-                : Colors.white,
+            foregroundColor: isYellow ? const Color(0xFF21182B) : Colors.white,
             child: Text(
               '$rank',
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
 

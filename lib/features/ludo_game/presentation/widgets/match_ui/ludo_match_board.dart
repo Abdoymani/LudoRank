@@ -706,7 +706,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   }
 }
 
-class _BoardToken {
+/*class _BoardToken {
   final LudoPlayer player;
   final LudoToken token;
   final Position position;
@@ -716,4 +716,4 @@ class _BoardToken {
     required this.token,
     required this.position,
   });
-}
+}*/

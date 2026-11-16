@@ -2660,7 +2660,7 @@ class $$PlayersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PlayersTable, Player>(table),
                   $$PlayersTableReferences(db, table, e),
                 ),
               )
@@ -2677,10 +2677,11 @@ class $$PlayersTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (tournamentPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Player,
                           $PlayersTable,
-                          TournamentPlayer
+                          TournamentPlayer,
+                          $TournamentPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$PlayersTableReferences
@@ -2691,17 +2692,16 @@ class $$PlayersTableTableManager
                                 table,
                                 p0,
                               ).tournamentPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.playerId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'player_id',
                           typedResults: items,
                         ),
                       if (matchPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Player,
                           $PlayersTable,
-                          MatchPlayer
+                          MatchPlayer,
+                          $MatchPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$PlayersTableReferences
@@ -2712,10 +2712,8 @@ class $$PlayersTableTableManager
                                 table,
                                 p0,
                               ).matchPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.playerId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'player_id',
                           typedResults: items,
                         ),
                     ];
@@ -3083,7 +3081,7 @@ class $$TournamentsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$TournamentsTable, Tournament>(table),
                   $$TournamentsTableReferences(db, table, e),
                 ),
               )
@@ -3100,10 +3098,11 @@ class $$TournamentsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (tournamentPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Tournament,
                           $TournamentsTable,
-                          TournamentPlayer
+                          TournamentPlayer,
+                          $TournamentPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$TournamentsTableReferences
@@ -3114,17 +3113,16 @@ class $$TournamentsTableTableManager
                                 table,
                                 p0,
                               ).tournamentPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.tournamentId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'tournament_id',
                           typedResults: items,
                         ),
                       if (matchesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Tournament,
                           $TournamentsTable,
-                          MatchData
+                          MatchData,
+                          $MatchesTable
                         >(
                           currentTable: table,
                           referencedTable: $$TournamentsTableReferences
@@ -3135,10 +3133,8 @@ class $$TournamentsTableTableManager
                                 table,
                                 p0,
                               ).matchesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.tournamentId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'tournament_id',
                           typedResults: items,
                         ),
                     ];
@@ -3485,7 +3481,7 @@ class $$TournamentPlayersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$TournamentPlayersTable, TournamentPlayer>(table),
                   $$TournamentPlayersTableReferences(db, table, e),
                 ),
               )
@@ -3950,7 +3946,7 @@ class $$MatchesTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$MatchesTable, MatchData>(table),
                   $$MatchesTableReferences(db, table, e),
                 ),
               )
@@ -3997,10 +3993,11 @@ class $$MatchesTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (matchPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           MatchData,
                           $MatchesTable,
-                          MatchPlayer
+                          MatchPlayer,
+                          $MatchPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$MatchesTableReferences
@@ -4011,10 +4008,8 @@ class $$MatchesTableTableManager
                                 table,
                                 p0,
                               ).matchPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.matchId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'match_id',
                           typedResults: items,
                         ),
                     ];
@@ -4403,7 +4398,7 @@ class $$MatchPlayersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$MatchPlayersTable, MatchPlayer>(table),
                   $$MatchPlayersTableReferences(db, table, e),
                 ),
               )

@@ -3,8 +3,7 @@ import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state_json_
 import 'package:ludo_rank/features/matches/data/data_sources/local/match_dao.dart';
 import 'package:ludo_rank/features/matches/domain/repositories/match_game_state_repository.dart';
 
-class MatchGameStateRepositoryImpl
-    implements MatchGameStateRepository {
+class MatchGameStateRepositoryImpl implements MatchGameStateRepository {
   final MatchDao _matchDao;
 
   MatchGameStateRepositoryImpl(this._matchDao);

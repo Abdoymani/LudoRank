@@ -28,17 +28,16 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
 
   Future<bool> updateMatch(MatchesCompanion match) async {
     if (!match.id.present) {
-      throw ArgumentError(
-        'Match ID is required to update a match.',
-      );
+      throw ArgumentError('Match ID is required to update a match.');
     }
 
-    final updatedRows = await (update(matches)
-      ..where((tbl) => tbl.id.equals(match.id.value)))
-        .write(match);
+    final updatedRows = await (update(
+      matches,
+    )..where((tbl) => tbl.id.equals(match.id.value))).write(match);
 
     return updatedRows > 0;
   }
+
   Future<int> deleteMatch(String id) {
     return (delete(matches)..where((tbl) => tbl.id.equals(id))).go();
   }
@@ -52,6 +51,7 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
   Future<List<db.MatchData>> getAllMatches() {
     return select(matches).get();
   }
+
   /// حفظ JSON الخاص بحالة اللعبة دون تعديل بيانات المباراة الأخرى.
   ///
   /// يرجع عدد الصفوف التي تم تحديثها:
@@ -60,12 +60,8 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
     required String matchId,
     required String gameStateJson,
   }) {
-    return (update(matches)
-      ..where((tbl) => tbl.id.equals(matchId)))
-        .write(
-      MatchesCompanion(
-        gameStateJson: Value(gameStateJson),
-      ),
+    return (update(matches)..where((tbl) => tbl.id.equals(matchId))).write(
+      MatchesCompanion(gameStateJson: Value(gameStateJson)),
     );
   }
 
@@ -81,12 +77,8 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
   ///
   /// يرجع عدد الصفوف التي تم تحديثها.
   Future<int> clearGameStateJson(String matchId) {
-    return (update(matches)
-      ..where((tbl) => tbl.id.equals(matchId)))
-        .write(
-      const MatchesCompanion(
-        gameStateJson: Value(null),
-      ),
+    return (update(matches)..where((tbl) => tbl.id.equals(matchId))).write(
+      const MatchesCompanion(gameStateJson: Value(null)),
     );
   }
 }

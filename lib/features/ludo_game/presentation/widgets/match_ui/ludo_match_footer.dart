@@ -39,8 +39,16 @@ class LudoMatchFooter extends StatelessWidget {
             Icon(_phaseIcon(phase), size: 16, color: Colors.white70),
             const SizedBox(width: 7),
             Flexible(
-              child: Text(message, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
+              child: Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -56,24 +64,46 @@ class LudoMatchFooter extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Icon(Icons.touch_app_rounded, size: 16, color: Colors.white70),
+            const Icon(
+              Icons.touch_app_rounded,
+              size: 16,
+              color: Colors.white70,
+            ),
             const SizedBox(width: 7),
             Flexible(
-              child: Text(message, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
+              child: Text(
+                message,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
       );
     }
 
-    final moves = availableMoves.where((move) => _tokenId(move) == selectedTokenId).toList(growable: false);
+    final moves = availableMoves
+        .where((move) => _tokenId(move) == selectedTokenId)
+        .toList(growable: false);
     if (moves.isEmpty) {
       return _footerShell(
         height,
         child: const Center(
-          child: Text('الحجر المحدد لا يملك حركة قانونية', maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
+          child: Text(
+            'الحجر المحدد لا يملك حركة قانونية',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
       );
     }
@@ -87,8 +117,12 @@ class LudoMatchFooter extends StatelessWidget {
         itemBuilder: (context, index) {
           final move = moves[index];
           final rollValue = _rollValue(move.rollSequence);
-          final title = move is ExitToken ? 'إخراج حجر' : 'تحريك ${(move as MoveToken).steps}';
-          final label = rollValue == null ? '#${move.rollSequence}' : '#${move.rollSequence}: $rollValue';
+          final title = move is ExitToken
+              ? 'إخراج حجر'
+              : 'تحريك ${(move as MoveToken).steps}';
+          final label = rollValue == null
+              ? '#${move.rollSequence}'
+              : '#${move.rollSequence}: $rollValue';
           return SizedBox(
             width: 112,
             child: FilledButton.tonal(
@@ -97,15 +131,29 @@ class LudoMatchFooter extends StatelessWidget {
                 backgroundColor: const Color(0xFF362B43),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: Color(0xFF6B5879))),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: const BorderSide(color: Color(0xFF6B5879)),
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                  Text(label, maxLines: 1, style: const TextStyle(fontSize: 9, color: Colors.white70)),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 9, color: Colors.white70),
+                  ),
                 ],
               ),
             ),

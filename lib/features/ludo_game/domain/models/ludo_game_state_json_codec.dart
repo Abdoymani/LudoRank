@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import '../entities/ludo_player.dart';
@@ -34,26 +33,17 @@ class LudoGameStateJsonCodec {
       final decoded = jsonDecode(source);
       final root = _asMap(decoded, 'root');
 
-      final version = _asInt(
-        root['formatVersion'],
-        'formatVersion',
-      );
+      final version = _asInt(root['formatVersion'], 'formatVersion');
 
       if (version != formatVersion) {
-        throw FormatException(
-          'إصدار بيانات اللعبة غير مدعوم: $version',
-        );
+        throw FormatException('إصدار بيانات اللعبة غير مدعوم: $version');
       }
 
-      return _stateFromJson(
-        _asMap(root['state'], 'state'),
-      );
+      return _stateFromJson(_asMap(root['state'], 'state'));
     } on FormatException {
       rethrow;
     } catch (error) {
-      throw FormatException(
-        'تعذر استعادة حالة اللعبة: $error',
-      );
+      throw FormatException('تعذر استعادة حالة اللعبة: $error');
     }
   }
 
@@ -61,9 +51,7 @@ class LudoGameStateJsonCodec {
   // GAME STATE
   // ============================================================
 
-  static Map<String, dynamic> _stateToJson(
-      LudoGameState state,
-      ) {
+  static Map<String, dynamic> _stateToJson(LudoGameState state) {
     return {
       'players': state.players.map(_playerToJson).toList(),
       'currentPlayerIndex': state.currentPlayerIndex,
@@ -74,33 +62,21 @@ class LudoGameStateJsonCodec {
     };
   }
 
-  static LudoGameState _stateFromJson(
-      Map<String, dynamic> json,
-      ) {
+  static LudoGameState _stateFromJson(Map<String, dynamic> json) {
     return LudoGameState(
-      players: _asList(
-        json['players'],
-        'players',
-      ).map(
-            (item) => _playerFromJson(
-          _asMap(item, 'players[]'),
-        ),
-      ).toList(growable: false),
+      players: _asList(json['players'], 'players')
+          .map((item) => _playerFromJson(_asMap(item, 'players[]')))
+          .toList(growable: false),
       currentPlayerIndex: _asInt(
         json['currentPlayerIndex'],
         'currentPlayerIndex',
       ),
-      turnState: _turnStateFromJson(
-        _asMap(json['turnState'], 'turnState'),
-      ),
+      turnState: _turnStateFromJson(_asMap(json['turnState'], 'turnState')),
       isStarted: _asBool(json['isStarted'], 'isStarted'),
       isFinished: _asBool(json['isFinished'], 'isFinished'),
-      finishedPlayerIds: _asList(
-        json['finishedPlayerIds'],
-        'finishedPlayerIds',
-      ).map(
-            (item) => _asString(item, 'finishedPlayerIds[]'),
-      ).toList(growable: false),
+      finishedPlayerIds: _asList(json['finishedPlayerIds'], 'finishedPlayerIds')
+          .map((item) => _asString(item, 'finishedPlayerIds[]'))
+          .toList(growable: false),
     );
   }
 
@@ -108,9 +84,7 @@ class LudoGameStateJsonCodec {
   // PLAYER
   // ============================================================
 
-  static Map<String, dynamic> _playerToJson(
-      LudoPlayer player,
-      ) {
+  static Map<String, dynamic> _playerToJson(LudoPlayer player) {
     return {
       'id': player.id,
       'playerId': player.playerId,
@@ -122,31 +96,17 @@ class LudoGameStateJsonCodec {
     };
   }
 
-  static LudoPlayer _playerFromJson(
-      Map<String, dynamic> json,
-      ) {
+  static LudoPlayer _playerFromJson(Map<String, dynamic> json) {
     return LudoPlayer(
       id: _asString(json['id'], 'player.id'),
       playerId: _asString(json['playerId'], 'player.playerId'),
       name: _asString(json['name'], 'player.name'),
-      color: _enumByName(
-        LudoPlayerColor.values,
-        json['color'],
-        'player.color',
-      ),
+      color: _enumByName(LudoPlayerColor.values, json['color'], 'player.color'),
       seat: _asInt(json['seat'], 'player.seat'),
-      tokens: _asList(
-        json['tokens'],
-        'player.tokens',
-      ).map(
-            (item) => _tokenFromJson(
-          _asMap(item, 'player.tokens[]'),
-        ),
-      ).toList(growable: false),
-      hasCaptured: _asBool(
-        json['hasCaptured'],
-        'player.hasCaptured',
-      ),
+      tokens: _asList(json['tokens'], 'player.tokens')
+          .map((item) => _tokenFromJson(_asMap(item, 'player.tokens[]')))
+          .toList(growable: false),
+      hasCaptured: _asBool(json['hasCaptured'], 'player.hasCaptured'),
     );
   }
 
@@ -154,9 +114,7 @@ class LudoGameStateJsonCodec {
   // TOKEN
   // ============================================================
 
-  static Map<String, dynamic> _tokenToJson(
-      LudoToken token,
-      ) {
+  static Map<String, dynamic> _tokenToJson(LudoToken token) {
     return {
       'id': token.id,
       'playerId': token.playerId,
@@ -168,25 +126,14 @@ class LudoGameStateJsonCodec {
     };
   }
 
-  static LudoToken _tokenFromJson(
-      Map<String, dynamic> json,
-      ) {
+  static LudoToken _tokenFromJson(Map<String, dynamic> json) {
     return LudoToken(
       id: _asString(json['id'], 'token.id'),
       playerId: _asString(json['playerId'], 'token.playerId'),
       tokenIndex: _asInt(json['tokenIndex'], 'token.tokenIndex'),
-      position: _positionFromJson(
-        _asMap(json['position'], 'token.position'),
-      ),
-      positionInPath: _asInt(
-        json['positionInPath'],
-        'token.positionInPath',
-      ),
-      state: _enumByName(
-        LudoTokenState.values,
-        json['state'],
-        'token.state',
-      ),
+      position: _positionFromJson(_asMap(json['position'], 'token.position')),
+      positionInPath: _asInt(json['positionInPath'], 'token.positionInPath'),
+      state: _enumByName(LudoTokenState.values, json['state'], 'token.state'),
       homeEntryPending: _asBool(
         json['homeEntryPending'],
         'token.homeEntryPending',
@@ -198,18 +145,11 @@ class LudoGameStateJsonCodec {
   // POSITION
   // ============================================================
 
-  static Map<String, dynamic> _positionToJson(
-      Position position,
-      ) {
-    return {
-      'row': position.row,
-      'column': position.column,
-    };
+  static Map<String, dynamic> _positionToJson(Position position) {
+    return {'row': position.row, 'column': position.column};
   }
 
-  static Position _positionFromJson(
-      Map<String, dynamic> json,
-      ) {
+  static Position _positionFromJson(Map<String, dynamic> json) {
     return Position(
       row: _asInt(json['row'], 'position.row'),
       column: _asInt(json['column'], 'position.column'),
@@ -220,52 +160,32 @@ class LudoGameStateJsonCodec {
   // TURN STATE
   // ============================================================
 
-  static Map<String, dynamic> _turnStateToJson(
-      TurnState turn,
-      ) {
+  static Map<String, dynamic> _turnStateToJson(TurnState turn) {
     return {
       'playerId': turn.playerId,
       'rolls': turn.rolls.map(_diceRollToJson).toList(),
-      'availableRolls': turn.availableRolls.rolls
-          .map(_diceRollToJson)
-          .toList(),
+      'availableRolls': turn.availableRolls.rolls.map(_diceRollToJson).toList(),
       'sixRollCount': turn.sixRollCount,
       'phase': turn.phase.name,
     };
   }
 
-  static TurnState _turnStateFromJson(
-      Map<String, dynamic> json,
-      ) {
+  static TurnState _turnStateFromJson(Map<String, dynamic> json) {
     return TurnState(
       playerId: _asString(json['playerId'], 'turn.playerId'),
-      rolls: _asList(
-        json['rolls'],
-        'turn.rolls',
-      ).map(
-            (item) => _diceRollFromJson(
-          _asMap(item, 'turn.rolls[]'),
-        ),
-      ).toList(growable: false),
+      rolls: _asList(json['rolls'], 'turn.rolls')
+          .map((item) => _diceRollFromJson(_asMap(item, 'turn.rolls[]')))
+          .toList(growable: false),
       availableRolls: AvailableRolls(
-        rolls: _asList(
-          json['availableRolls'],
-          'turn.availableRolls',
-        ).map(
-              (item) => _diceRollFromJson(
-            _asMap(item, 'turn.availableRolls[]'),
-          ),
-        ).toList(growable: false),
+        rolls: _asList(json['availableRolls'], 'turn.availableRolls')
+            .map(
+              (item) =>
+                  _diceRollFromJson(_asMap(item, 'turn.availableRolls[]')),
+            )
+            .toList(growable: false),
       ),
-      sixRollCount: _asInt(
-        json['sixRollCount'],
-        'turn.sixRollCount',
-      ),
-      phase: _enumByName(
-        TurnPhase.values,
-        json['phase'],
-        'turn.phase',
-      ),
+      sixRollCount: _asInt(json['sixRollCount'], 'turn.sixRollCount'),
+      phase: _enumByName(TurnPhase.values, json['phase'], 'turn.phase'),
     );
   }
 
@@ -273,114 +193,74 @@ class LudoGameStateJsonCodec {
   // DICE ROLL
   // ============================================================
 
-  static Map<String, dynamic> _diceRollToJson(
-      DiceRoll roll,
-      ) {
-    return {
-      'value': roll.value,
-      'sequence': roll.sequence,
-    };
+  static Map<String, dynamic> _diceRollToJson(DiceRoll roll) {
+    return {'value': roll.value, 'sequence': roll.sequence};
   }
 
-  static DiceRoll _diceRollFromJson(
-      Map<String, dynamic> json,
-      ) {
+  static DiceRoll _diceRollFromJson(Map<String, dynamic> json) {
     final value = _asInt(json['value'], 'dice.value');
-    final sequence = _asInt(
-      json['sequence'],
-      'dice.sequence',
-    );
+    final sequence = _asInt(json['sequence'], 'dice.sequence');
 
     if (value < 1 || value > 6) {
       throw FormatException('قيمة النرد غير صحيحة: $value');
     }
 
     if (sequence < 1) {
-      throw FormatException(
-        'ترتيب الرمية غير صحيح: $sequence',
-      );
+      throw FormatException('ترتيب الرمية غير صحيح: $sequence');
     }
 
-    return DiceRoll(
-      value: value,
-      sequence: sequence,
-    );
+    return DiceRoll(value: value, sequence: sequence);
   }
 
   // ============================================================
   // JSON VALIDATION HELPERS
   // ============================================================
 
-  static Map<String, dynamic> _asMap(
-      dynamic value,
-      String field,
-      ) {
+  static Map<String, dynamic> _asMap(dynamic value, String field) {
     if (value is! Map) {
-      throw FormatException(
-        'الحقل $field يجب أن يكون Object.',
-      );
+      throw FormatException('الحقل $field يجب أن يكون Object.');
     }
 
     return Map<String, dynamic>.from(value);
   }
 
-  static List<dynamic> _asList(
-      dynamic value,
-      String field,
-      ) {
+  static List<dynamic> _asList(dynamic value, String field) {
     if (value is! List) {
-      throw FormatException(
-        'الحقل $field يجب أن يكون List.',
-      );
+      throw FormatException('الحقل $field يجب أن يكون List.');
     }
 
     return value;
   }
 
-  static String _asString(
-      dynamic value,
-      String field,
-      ) {
+  static String _asString(dynamic value, String field) {
     if (value is! String) {
-      throw FormatException(
-        'الحقل $field يجب أن يكون String.',
-      );
+      throw FormatException('الحقل $field يجب أن يكون String.');
     }
 
     return value;
   }
 
-  static int _asInt(
-      dynamic value,
-      String field,
-      ) {
+  static int _asInt(dynamic value, String field) {
     if (value is! int) {
-      throw FormatException(
-        'الحقل $field يجب أن يكون int.',
-      );
+      throw FormatException('الحقل $field يجب أن يكون int.');
     }
 
     return value;
   }
 
-  static bool _asBool(
-      dynamic value,
-      String field,
-      ) {
+  static bool _asBool(dynamic value, String field) {
     if (value is! bool) {
-      throw FormatException(
-        'الحقل $field يجب أن يكون bool.',
-      );
+      throw FormatException('الحقل $field يجب أن يكون bool.');
     }
 
     return value;
   }
 
   static T _enumByName<T extends Enum>(
-      List<T> values,
-      dynamic value,
-      String field,
-      ) {
+    List<T> values,
+    dynamic value,
+    String field,
+  ) {
     final name = _asString(value, field);
 
     for (final item in values) {
@@ -389,8 +269,6 @@ class LudoGameStateJsonCodec {
       }
     }
 
-    throw FormatException(
-      'قيمة enum غير معروفة في $field: $name',
-    );
+    throw FormatException('قيمة enum غير معروفة في $field: $name');
   }
 }

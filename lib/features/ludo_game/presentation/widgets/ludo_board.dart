@@ -26,8 +26,6 @@ class LudoBoard extends StatelessWidget {
   });
 
   @override
-
-  @override
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 1,
@@ -44,11 +42,7 @@ class LudoBoard extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: <Widget>[
-                Positioned.fill(
-                  child: LudoMatchBoardArt(
-                    players: players,
-                  ),
-                ),
+                Positioned.fill(child: LudoMatchBoardArt(players: players)),
                 ..._buildTokens(boardSize),
               ],
             ),
@@ -57,7 +51,6 @@ class LudoBoard extends StatelessWidget {
       ),
     );
   }
-
 
   // ============================================================
   // TOKENS
@@ -348,7 +341,7 @@ class _LudoBoardToken extends StatelessWidget {
   }
 }
 
-// ==================================================================
+/* ==================================================================
 // BOARD PAINTER
 // ==================================================================
 
@@ -707,13 +700,13 @@ class _LudoBoardPainter extends CustomPainter {
   bool shouldRepaint(covariant _LudoBoardPainter oldDelegate) {
     return false;
   }
-}
+}*/
 
 // ==================================================================
 // CENTER TRIANGLE
 // ==================================================================
 
-class _TriangleSlice {
+/*class _TriangleSlice {
   final Color color;
   final Offset a;
   final Offset b;
@@ -725,4 +718,4 @@ class _TriangleSlice {
     required this.b,
     required this.center,
   });
-}
+}*/

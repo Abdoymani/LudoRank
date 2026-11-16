@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -9,13 +8,8 @@ class ThemeController extends ChangeNotifier {
 
   late ThemeMode _themeMode;
 
-  ThemeController({
-    required Box settingsBox,
-  }) : _settingsBox = settingsBox {
-    final savedMode = _settingsBox.get(
-      _themeKey,
-      defaultValue: 'system',
-    );
+  ThemeController({required Box settingsBox}) : _settingsBox = settingsBox {
+    final savedMode = _settingsBox.get(_themeKey, defaultValue: 'system');
 
     _themeMode = _parseThemeMode(savedMode);
   }

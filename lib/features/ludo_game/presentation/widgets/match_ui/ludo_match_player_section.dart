@@ -177,50 +177,50 @@ class LudoMatchPlayerSection extends StatelessWidget {
             height: 26,
             child: availableRolls.isNotEmpty
                 ? ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: availableRolls.rolls.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 5),
-              itemBuilder: (context, index) {
-                final roll = availableRolls.rolls[index];
-                final isSelected = selectedRollSequence == roll.sequence;
+                    scrollDirection: Axis.horizontal,
+                    itemCount: availableRolls.rolls.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 5),
+                    itemBuilder: (context, index) {
+                      final roll = availableRolls.rolls[index];
+                      final isSelected = selectedRollSequence == roll.sequence;
 
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(7),
-                    onTap: () => onAvailableRollTap(roll.sequence),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? color.withValues(alpha: .35)
-                            : const Color(0xFF181321),
-                        borderRadius: BorderRadius.circular(7),
-                        border: Border.all(
-                          color: isSelected
-                              ? const Color(0xFFFFD166)
-                              : color.withValues(alpha: .72),
-                          width: isSelected ? 2 : 1,
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(7),
+                          onTap: () => onAvailableRollTap(roll.sequence),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? color.withValues(alpha: .35)
+                                  : const Color(0xFF181321),
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFFFFD166)
+                                    : color.withValues(alpha: .72),
+                                width: isSelected ? 2 : 1,
+                              ),
+                            ),
+                            child: MatchDieFace(value: roll.value, size: 18),
+                          ),
                         ),
+                      );
+                    },
+                  )
+                : Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      turnState?.isRolling == true
+                          ? 'اضغط لرمي النرد'
+                          : 'لا توجد رميات متبقية',
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 9,
                       ),
-                      child: MatchDieFace(value: roll.value, size: 18),
                     ),
                   ),
-                );
-              },
-            )
-                : Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                turnState?.isRolling == true
-                    ? 'اضغط لرمي النرد'
-                    : 'لا توجد رميات متبقية',
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 9,
-                ),
-              ),
-            ),
           ),
         ],
       ),

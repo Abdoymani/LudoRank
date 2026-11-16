@@ -32,9 +32,7 @@ class PlayerRepositoryImpl implements PlayerRepository {
       throw const DuplicatePlayerNameException();
     }
 
-    final model = PlayerModel.fromEntity(
-      player.copyWith(name: name),
-    );
+    final model = PlayerModel.fromEntity(player.copyWith(name: name));
 
     await dao.insertPlayer(model.toCompanion());
   }

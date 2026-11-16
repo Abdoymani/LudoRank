@@ -24,9 +24,9 @@ class PlayerDao extends DatabaseAccessor<AppDatabase> with _$PlayerDaoMixin {
   }
 
   Future<bool> playerNameExists(String name) async {
-    final player = await (select(players)
-      ..where((tbl) => tbl.name.equals(name.trim())))
-        .getSingleOrNull();
+    final player = await (select(
+      players,
+    )..where((tbl) => tbl.name.equals(name.trim()))).getSingleOrNull();
 
     return player != null;
   }

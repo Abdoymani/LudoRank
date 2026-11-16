@@ -60,19 +60,13 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'اسم اللاعب مسجل بالفعل، اختر اسمًا آخر',
-          ),
-        ),
+        const SnackBar(content: Text('اسم اللاعب مسجل بالفعل، اختر اسمًا آخر')),
       );
     } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر إضافة اللاعب، حاول مرة أخرى'),
-        ),
+        const SnackBar(content: Text('تعذر إضافة اللاعب، حاول مرة أخرى')),
       );
     }
   }

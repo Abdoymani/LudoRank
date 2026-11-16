@@ -44,10 +44,7 @@ class LudoPrototypeBoardFrame extends StatelessWidget {
                   ],
                   stops: <double>[0, .20, .52, .78, 1],
                 ),
-                border: Border.all(
-                  color: const Color(0xFF59351F),
-                  width: 1.6,
-                ),
+                border: Border.all(color: const Color(0xFF59351F), width: 1.6),
                 boxShadow: const <BoxShadow>[
                   BoxShadow(
                     color: Color(0x99000000),
@@ -242,7 +239,8 @@ class _PrototypeBoardPainter extends CustomPainter {
     // leaving the four colored home interiors smooth and free of gridlines.
     for (final boardCell in geometry.cells) {
       final position = boardCell.position;
-      final insideCenterSquare = position.row >= 7 &&
+      final insideCenterSquare =
+          position.row >= 7 &&
           position.row <= 9 &&
           position.column >= 7 &&
           position.column <= 9;
@@ -393,7 +391,11 @@ class _PrototypeBoardPainter extends CustomPainter {
         ..strokeWidth = math.max(.9, cell * .05).toDouble()
         ..color = const Color(0xFF75442C),
     );
-    canvas.drawCircle(center, cell * .115, Paint()..color = const Color(0xFF453026));
+    canvas.drawCircle(
+      center,
+      cell * .115,
+      Paint()..color = const Color(0xFF453026),
+    );
 
     // Keep the center as one square; do not draw the normal 15x15 grid over
     // the four diagonal color wedges.
@@ -416,9 +418,9 @@ class _PrototypeBoardPainter extends CustomPainter {
                 tokenIndex: token.tokenIndex,
               )
             : token.position;
-        groups.putIfAbsent(position, () => <_TokenVisual>[]).add(
-              _TokenVisual(color: player.color, position: position),
-            );
+        groups
+            .putIfAbsent(position, () => <_TokenVisual>[])
+            .add(_TokenVisual(color: player.color, position: position));
       }
     }
 
@@ -426,7 +428,8 @@ class _PrototypeBoardPainter extends CustomPainter {
     for (final group in groups.values) {
       for (var i = 0; i < group.length; i++) {
         final item = group[i];
-        final center = geometry.cellCenter(item.position, side) +
+        final center =
+            geometry.cellCenter(item.position, side) +
             _stackOffset(i, group.length, cell);
         final tone = prototypeColorFor(item.color);
         final darkTone = Color.lerp(tone, Colors.black, .30)!;
@@ -441,7 +444,11 @@ class _PrototypeBoardPainter extends CustomPainter {
             ..color = const Color(0x99000000)
             ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * .08),
         );
-        canvas.drawCircle(center, radius * 1.12, Paint()..color = const Color(0xFFFFF4D8));
+        canvas.drawCircle(
+          center,
+          radius * 1.12,
+          Paint()..color = const Color(0xFFFFF4D8),
+        );
         canvas.drawCircle(
           center,
           radius * 1.04,
@@ -480,7 +487,8 @@ class _PrototypeBoardPainter extends CustomPainter {
   }
 
   void _paintTokenEmblem(Canvas canvas, Offset center, double radius) {
-    final emblemPaint = Paint()..color = const Color(0xFFFFF9EB).withValues(alpha: .96);
+    final emblemPaint = Paint()
+      ..color = const Color(0xFFFFF9EB).withValues(alpha: .96);
     // A compact pawn-like emblem remains legible even on a small mobile cell.
     canvas.drawCircle(
       center - Offset(0, radius * .23),
@@ -518,7 +526,11 @@ class _PrototypeBoardPainter extends CustomPainter {
     ];
 
     if (count <= 1) return Offset.zero;
-    final offsets = count == 2 ? two : count == 3 ? three : four;
+    final offsets = count == 2
+        ? two
+        : count == 3
+        ? three
+        : four;
     final safeIndex = index.clamp(0, offsets.length - 1).toInt();
     return offsets[safeIndex] * cell;
   }
@@ -586,7 +598,7 @@ class _PrototypeBoardPainter extends CustomPainter {
         );
       // This badge is drawn only while the lane is locked, so always draw
       // the closed shackle here. After the first capture, the loop continues
-      // above and no badge is painted for this player. 
+      // above and no badge is painted for this player.
       shackle.lineTo(center.dx + w * .30, center.dy + cell * .015);
       canvas.drawPath(shackle, iconPaint);
       canvas.drawRRect(

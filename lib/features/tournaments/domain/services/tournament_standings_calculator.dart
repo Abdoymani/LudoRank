@@ -1,4 +1,3 @@
-
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
@@ -58,11 +57,9 @@ class TournamentStandingsCalculator {
       final entryKey = '${result.matchId}:${result.playerId}';
       if (!processedEntries.add(entryKey)) continue;
 
-      points[result.playerId] =
-          points[result.playerId]! + result.points;
+      points[result.playerId] = points[result.playerId]! + result.points;
 
-      matchesPlayed[result.playerId] =
-          matchesPlayed[result.playerId]! + 1;
+      matchesPlayed[result.playerId] = matchesPlayed[result.playerId]! + 1;
 
       final rank = result.rank;
 
