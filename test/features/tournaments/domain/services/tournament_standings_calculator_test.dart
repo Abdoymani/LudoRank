@@ -1,4 +1,3 @@
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
@@ -63,8 +62,7 @@ void main() {
         ],
       );
 
-      expect(standings.map((s) => s.playerId).toList(),
-          ['p1', 'p2', 'p3']);
+      expect(standings.map((s) => s.playerId).toList(), ['p1', 'p2', 'p3']);
       expect(standings[2].points, 0);
       expect(standings[2].matchesPlayed, 0);
       expect(standings[2].wins, 0);
@@ -97,10 +95,7 @@ void main() {
       );
 
       expect(standings.firstWhere((s) => s.playerId == 'p1').points, 2);
-      expect(
-        standings.firstWhere((s) => s.playerId == 'p1').matchesPlayed,
-        1,
-      );
+      expect(standings.firstWhere((s) => s.playerId == 'p1').matchesPlayed, 1);
     });
 
     test('calculates wins, matches played, and best rank', () {
@@ -189,8 +184,7 @@ void main() {
       );
 
       final positions = {
-        for (final standing in standings)
-          standing.playerId: standing.position,
+        for (final standing in standings) standing.playerId: standing.position,
       };
 
       expect(positions['p1'], 1);

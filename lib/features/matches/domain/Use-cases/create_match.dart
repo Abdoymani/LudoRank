@@ -1,5 +1,6 @@
 import 'package:ludo_rank/features/match_players/domain/repositories/match_player_repository.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
+import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 import '../entities/match.dart';
 
 import '../repositories/match_repository.dart';
@@ -8,9 +9,15 @@ class CreateMatch {
   final MatchRepository matchRepository;
   final MatchPlayerRepository matchPlayerRepository;
 
+  /// Optional so the use case can be tested without tournaments.
+  /// When given, closed tournaments reject new matches and the first
+  /// match moves the tournament to Running.
+  final TournamentLifecycleService? tournamentLifecycle;
+
   CreateMatch({
     required this.matchRepository,
     required this.matchPlayerRepository,
+    this.tournamentLifecycle,
   });
 
   Future<void> call({
@@ -20,6 +27,8 @@ class CreateMatch {
     _validateMatch(match);
     _validatePlayers(match, players);
 
+    await tournamentLifecycle?.ensureCanCreateMatch(match.tournamentId);
+
     await matchRepository.create(match);
 
     try {
@@ -28,6 +37,8 @@ class CreateMatch {
       await matchRepository.delete(match.id);
       rethrow;
     }
+
+    await tournamentLifecycle?.markRunning(match.tournamentId);
   }
 
   void _validateMatch(Match match) {

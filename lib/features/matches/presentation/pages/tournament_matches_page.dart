@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 
+import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
 import 'package:ludo_rank/features/matches/presentation/providers/match_provider.dart';
@@ -68,6 +69,51 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
 
   Future<void> _refreshMatches() async {
     await _loadMatches();
+  }
+
+  Future<void> _cancelMatch(Match match) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('إلغاء ${_matchTitle(match)}؟'),
+        content: const Text(
+          'لن تُحسب هذه المباراة في ترتيب البطولة، '
+          'ولن يمكن استكمالها بعد الإلغاء.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('رجوع'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('إلغاء المباراة'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await sl<CancelMatch>()(match.id);
+      if (!mounted) return;
+      await _loadMatches();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('تم إلغاء ${_matchTitle(match)}.')),
+        );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('تعذر إلغاء المباراة: $e')));
+    }
   }
 
   Future<void> _toggleFinishedMatch(Match match) async {
@@ -326,6 +372,9 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
                     onResume: match.status == MatchStatus.playing
                         ? () => _openMatch(match, resumeExisting: true)
                         : null,
+                    onCancel: CancelMatch.canCancel(match.status)
+                        ? () => _cancelMatch(match)
+                        : null,
                   ),
                 ),
 
@@ -411,6 +460,7 @@ class _MatchCard extends StatelessWidget {
   final bool loadingResult;
   final List<_FinishedPlayerResult> results;
   final VoidCallback? onResume;
+  final VoidCallback? onCancel;
 
   const _MatchCard({
     required this.match,
@@ -419,6 +469,7 @@ class _MatchCard extends StatelessWidget {
     required this.loadingResult,
     required this.results,
     required this.onResume,
+    required this.onCancel,
   });
 
   @override
@@ -441,7 +492,7 @@ class _MatchCard extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         child: Text(
-                          '#',
+                          match.matchNumber > 0 ? '${match.matchNumber}' : '#',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -451,7 +502,7 @@ class _MatchCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'مباراة ${match.id.substring(0, 8)}',
+                              _matchTitle(match),
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
@@ -498,16 +549,30 @@ class _MatchCard extends StatelessWidget {
               ),
             ),
           ),
-          if (match.status == MatchStatus.playing && onResume != null)
+          if (onResume != null || onCancel != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: OutlinedButton.icon(
-                  onPressed: onResume,
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('استكمال المباراة'),
-                ),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (onCancel != null)
+                    TextButton.icon(
+                      onPressed: onCancel,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('إلغاء'),
+                    ),
+                  if (match.status == MatchStatus.playing && onResume != null)
+                    OutlinedButton.icon(
+                      onPressed: onResume,
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('استكمال المباراة'),
+                    ),
+                ],
               ),
             ),
 
@@ -709,4 +774,10 @@ class _FinishedPlayerResult {
     required this.points,
     required this.color,
   });
+}
+
+String _matchTitle(Match match) {
+  return match.matchNumber > 0
+      ? 'مباراة رقم ${match.matchNumber}'
+      : 'مباراة ${match.id.substring(0, 8)}';
 }

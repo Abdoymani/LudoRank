@@ -1,4 +1,6 @@
 import 'package:get_it/get_it.dart';
+import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
+import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 
 import 'package:ludo_rank/core/database/database.dart';
 import 'package:ludo_rank/features/home/data/data_sources/local/home_dao.dart';
@@ -82,10 +84,25 @@ Future<void> initDependencies() async {
   );
 
   // Repository
+  sl.registerLazySingleton<TournamentLifecycleService>(
+    () => TournamentLifecycleService(
+      tournamentRepository: sl<TournamentRepository>(),
+      matchRepository: sl<MatchRepository>(),
+    ),
+  );
+
   sl.registerLazySingleton<CreateMatch>(
     () => CreateMatch(
       matchRepository: sl<MatchRepository>(),
       matchPlayerRepository: sl<MatchPlayerRepository>(),
+      tournamentLifecycle: sl<TournamentLifecycleService>(),
+    ),
+  );
+
+  sl.registerLazySingleton<CancelMatch>(
+    () => CancelMatch(
+      matchRepository: sl<MatchRepository>(),
+      gameStateRepository: sl<MatchGameStateRepository>(),
     ),
   );
 
