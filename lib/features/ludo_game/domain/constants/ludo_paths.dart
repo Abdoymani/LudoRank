@@ -42,10 +42,7 @@ class LudoPath {
   /// 56      = Finish
   final List<Position> homePath;
 
-  const LudoPath({
-    required this.mainLoopPath,
-    required this.homePath,
-  });
+  const LudoPath({required this.mainLoopPath, required this.homePath});
 
   // ============================================================
   // LOGICAL CONSTANTS
@@ -148,10 +145,7 @@ class LudoPath {
   ///
   /// The LudoGameEngine decides whether [useHomeLane] should be
   /// true or false for the current token and movement context.
-  Position positionAt({
-    required int step,
-    required bool useHomeLane,
-  }) {
+  Position positionAt({required int step, required bool useHomeLane}) {
     _validateStep(step);
 
     if (!useHomeLane) {
@@ -186,10 +180,7 @@ class LudoPath {
   /// one more full lap" rule is NOT implemented here.
   /// The Engine decides when a token should switch from the
   /// Main Loop interpretation to the Home Lane interpretation.
-  int nextStep({
-    required int currentStep,
-    required bool useHomeLane,
-  }) {
+  int nextStep({required int currentStep, required bool useHomeLane}) {
     _validateStep(currentStep);
 
     if (useHomeLane) {
@@ -241,12 +232,7 @@ class LudoPath {
 
   void _validateStep(int step) {
     if (step < 0 || step > finishStep) {
-      throw RangeError.range(
-        step,
-        0,
-        finishStep,
-        'step',
-      );
+      throw RangeError.range(step, 0, finishStep, 'step');
     }
   }
 }

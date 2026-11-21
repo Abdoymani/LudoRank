@@ -10,6 +10,7 @@ import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_player_section.dart';
 import 'package:ludo_rank/features/matches/presentation/providers/match_game_provider.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
+import 'dart:async';
 
 class MatchGamePage extends StatefulWidget {
   /// Database match ID.
@@ -17,11 +18,13 @@ class MatchGamePage extends StatefulWidget {
 
   /// Key = playerId, value = name.
   final Map<String, String> playerNames;
+  final bool resumeExisting;
 
   const MatchGamePage({
     super.key,
     required this.matchId,
     required this.playerNames,
+    this.resumeExisting = false,
   });
 
   @override
@@ -34,11 +37,17 @@ class _MatchGamePageState extends State<MatchGamePage> {
   @override
   void initState() {
     super.initState();
+
     provider = sl<MatchGameProvider>();
-    provider.startMatch(
-      matchId: widget.matchId,
-      playerNames: widget.playerNames,
-    );
+
+    if (widget.resumeExisting) {
+      provider.resumeMatch(matchId: widget.matchId);
+    } else {
+      provider.startMatch(
+        matchId: widget.matchId,
+        playerNames: widget.playerNames,
+      );
+    }
   }
 
   @override
@@ -160,6 +169,7 @@ class _MatchGamePageState extends State<MatchGamePage> {
                           matchPlayers:
                               gameProvider.session?.matchPlayers ??
                               const <MatchPlayer>[],
+                          gamePlayers: gameProvider.players,
                         ),
                       ),
                     ),
@@ -176,8 +186,7 @@ class _MatchGamePageState extends State<MatchGamePage> {
 class _LiveMatchLayout extends StatelessWidget {
   final MatchGameProvider provider;
   final ValueChanged<LudoToken> onTokenTap;
-  final ValueChanged<MoveOption> onMove;
-
+  final Future<void> Function(MoveOption) onMove;
   const _LiveMatchLayout({
     required this.provider,
     required this.onTokenTap,
@@ -190,9 +199,17 @@ class _LiveMatchLayout extends StatelessWidget {
     final currentPlayer = provider.currentPlayer;
 
     if (players.isEmpty || currentPlayer == null) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2.5));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            provider.error ?? 'جارٍ تحميل المباراة...',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+      );
     }
-
     final playersByColor = <LudoPlayerColor, LudoPlayer>{
       for (final player in players) player.color: player,
     };
@@ -253,11 +270,21 @@ class _LiveMatchLayout extends StatelessWidget {
                               currentPlayerId: currentPlayer.playerId,
                               availableMoves: provider.availableMoves,
                               selectedTokenId: provider.selectedTokenId,
+                              selectedRollSequence:
+                                  provider.selectedRollSequence,
+                              pendingAutoMove: provider.isSnapshotSaveBlocked
+                                  ? null
+                                  : provider.pendingAutoMove,
                               onTokenTap: onTokenTap,
                               legalMoveDestinations:
                                   provider.selectedMoveDestinations,
                               rollValueForMove: provider.rollValueForMove,
                               onMoveTap: onMove,
+
+                              // الرميات التي تناسب التوكن المحدد فقط.
+                              selectableRolls: provider.selectableRolls,
+                              onAvailableRollTap:
+                                  provider.handleAvailableRollTap,
                             ),
                           );
                         },
@@ -347,8 +374,12 @@ class _LiveMatchLayout extends StatelessWidget {
                 ? provider.availableRolls
                 : provider.availableRolls.clear(),
             canRoll: isCurrent && provider.canRollDice,
-            onRoll: provider.rollDice,
+            onRoll: () {
+              unawaited(provider.rollDice());
+            },
             height: isCurrent ? activeCardHeight : inactiveCardHeight,
+            onAvailableRollTap: provider.handleAvailableRollTap,
+            selectedRollSequence: provider.selectedRollSequence,
           ),
         ),
       ),

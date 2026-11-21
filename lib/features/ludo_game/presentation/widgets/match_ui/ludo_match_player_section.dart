@@ -14,6 +14,8 @@ class LudoMatchPlayerSection extends StatelessWidget {
   final bool canRoll;
   final VoidCallback onRoll;
   final double height;
+  final ValueChanged<int> onAvailableRollTap;
+  final int? selectedRollSequence;
 
   const LudoMatchPlayerSection({
     super.key,
@@ -24,6 +26,8 @@ class LudoMatchPlayerSection extends StatelessWidget {
     required this.canRoll,
     required this.onRoll,
     required this.height,
+    required this.onAvailableRollTap,
+    required this.selectedRollSequence,
   });
 
   @override
@@ -170,7 +174,7 @@ class LudoMatchPlayerSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           SizedBox(
-            height: 22,
+            height: 26,
             child: availableRolls.isNotEmpty
                 ? ListView.separated(
                     scrollDirection: Axis.horizontal,
@@ -178,16 +182,30 @@ class LudoMatchPlayerSection extends StatelessWidget {
                     separatorBuilder: (_, _) => const SizedBox(width: 5),
                     itemBuilder: (context, index) {
                       final roll = availableRolls.rolls[index];
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF181321),
+                      final isSelected = selectedRollSequence == roll.sequence;
+
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(7),
-                          border: Border.all(
-                            color: color.withValues(alpha: .72),
+                          onTap: () => onAvailableRollTap(roll.sequence),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? color.withValues(alpha: .35)
+                                  : const Color(0xFF181321),
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFFFFD166)
+                                    : color.withValues(alpha: .72),
+                                width: isSelected ? 2 : 1,
+                              ),
+                            ),
+                            child: MatchDieFace(value: roll.value, size: 18),
                           ),
                         ),
-                        child: MatchDieFace(value: roll.value, size: 18),
                       );
                     },
                   )

@@ -14,6 +14,8 @@ import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 
+import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
+
 /// Live interactive wrapper around the visual board.
 ///
 /// The board handles presentation and input only.
@@ -26,6 +28,7 @@ class LudoMatchBoard extends StatefulWidget {
   final int? selectedRollSequence;
   final MoveOption? pendingAutoMove;
   final ValueChanged<LudoToken> onTokenTap;
+  final Future<void> Function(MoveOption) onMoveTap;
 
   /// Legal destinations for the currently selected token.
   final Map<Position, List<MoveOption>> legalMoveDestinations;
@@ -33,8 +36,11 @@ class LudoMatchBoard extends StatefulWidget {
   /// Returns the dice value associated with a move.
   final int? Function(MoveOption) rollValueForMove;
 
+  final AvailableRolls selectableRolls;
+  final ValueChanged<int> onAvailableRollTap;
+
   /// Called when a specific legal move is selected.
-  final ValueChanged<MoveOption> onMoveTap;
+  //final ValueChanged<MoveOption> onMoveTap;
 
   const LudoMatchBoard({
     super.key,
@@ -48,6 +54,8 @@ class LudoMatchBoard extends StatefulWidget {
     required this.onMoveTap,
     this.selectedRollSequence,
     this.pendingAutoMove,
+    required this.selectableRolls,
+    required this.onAvailableRollTap,
   });
 
   @override
@@ -62,7 +70,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   List<Position> _animationPath = <Position>[];
   String? _animatingTokenId;
   bool _startingAutoMove = false;
-
+  bool _completingMove = false;
   late final AudioPlayer _stepPlayer;
   int _lastSoundStep = 0;
 
@@ -107,17 +115,14 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final side = math.min(
-          constraints.maxWidth,
-          constraints.maxHeight,
-        );
+        final side = math.min(constraints.maxWidth, constraints.maxHeight);
 
         if (!side.isFinite || side <= 0) {
           return const SizedBox.shrink();
         }
 
-        final frame = (side * .031).clamp(7.0, 11.0).toDouble();
-        final innerSide = side - frame * 2;
+        final frame = (side * .017).clamp(3.0, 5.0).toDouble();
+        final innerSide = side - frame * 1.1;
 
         return Center(
           child: SizedBox.square(
@@ -137,10 +142,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: <Widget>[
-                      ..._buildTokenTargets(
-                        frame: frame,
-                        innerSide: innerSide,
-                      ),
+                      ..._buildTokenTargets(frame: frame, innerSide: innerSide),
                       ..._buildDestinationTargets(
                         frame: frame,
                         innerSide: innerSide,
@@ -150,10 +152,10 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                 ),
 
                 if (_animatingMove != null)
-                  _buildAnimatedToken(
-                    frame: frame,
-                    innerSide: innerSide,
-                  ),
+                  _buildAnimatedToken(frame: frame, innerSide: innerSide),
+                if (widget.selectableRolls.isNotEmpty &&
+                    widget.selectedTokenId != null)
+                  _buildSelectedTokenDice(frame: frame, innerSide: innerSide),
               ],
             ),
           ),
@@ -161,12 +163,12 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       },
     );
   }
+
   @override
   void dispose() {
     _controller.dispose();
     unawaited(_stepPlayer.dispose());
     super.dispose();
-
   }
 
   void _tryStartAutomaticMove() {
@@ -186,16 +188,18 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     final tokenId = widget.selectedTokenId;
     if (tokenId == null) return;
 
-    final candidates = widget.availableMoves.where((move) {
-      final moveTokenId = switch (move) {
-        MoveToken(:final tokenId) => tokenId,
-        ExitToken(:final tokenId) => tokenId,
-      };
+    final candidates = widget.availableMoves
+        .where((move) {
+          final moveTokenId = switch (move) {
+            MoveToken(:final tokenId) => tokenId,
+            ExitToken(:final tokenId) => tokenId,
+          };
 
-      return moveTokenId == tokenId &&
-          (widget.selectedRollSequence == null ||
-              move.rollSequence == widget.selectedRollSequence);
-    }).toList(growable: false);
+          return moveTokenId == tokenId &&
+              (widget.selectedRollSequence == null ||
+                  move.rollSequence == widget.selectedRollSequence);
+        })
+        .toList(growable: false);
 
     if (candidates.length == 1) {
       _startMoveAnimation(candidates.single);
@@ -210,8 +214,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     }
 
     if (a is ExitToken && b is ExitToken) {
-      return a.tokenId == b.tokenId &&
-          a.rollSequence == b.rollSequence;
+      return a.tokenId == b.tokenId && a.rollSequence == b.rollSequence;
     }
 
     return false;
@@ -231,7 +234,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     };
 
     final player = widget.players.cast<LudoPlayer?>().firstWhere(
-          (p) => p?.tokens.any((token) => token.id == tokenId) ?? false,
+      (p) => p?.tokens.any((token) => token.id == tokenId) ?? false,
       orElse: () => null,
     );
 
@@ -239,10 +242,21 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
     final token = player.tokens.firstWhere((t) => t.id == tokenId);
     final path = _pathFor(player.color);
-    final positions = <Position>[token.position];
+    final geometry = LudoBoardGeometry.instance;
+
+    // القطعة الموجودة في البيت ليس لها Position صالح على مسار اللعب.
+    // نستخدم مكانها المرئي الحقيقي داخل Home Zone كبداية للأنيميشن.
+    final startPosition = move is ExitToken
+        ? geometry.tokenHomePosition(
+            color: player.color,
+            tokenIndex: token.tokenIndex,
+          )
+        : token.position;
+
+    final positions = <Position>[startPosition];
 
     if (move is ExitToken) {
-      // الخروج من قاعدة اللاعب إلى نقطة البداية.
+      // الخروج من مكان القطعة داخل البيت إلى نقطة البداية.
       positions.add(path.startingPosition);
     } else if (move is MoveToken) {
       var step = token.positionInPath;
@@ -253,7 +267,8 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
         if (step == LudoPath.finishStep) return;
 
         // نفس تفسير المحرك للخطوة 51 والحارة المنزلية.
-        final useHomeLane = player.hasCaptured &&
+        final useHomeLane =
+            player.hasCaptured &&
             !(homeEntryPending && step == LudoPath.lastMainLoopStep);
 
         final nextStep = path.nextStep(
@@ -264,18 +279,14 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
         destinationUsesHomeLane =
             useHomeLane && nextStep >= LudoPath.homeLaneStartStep;
 
-        if (destinationUsesHomeLane &&
-            nextStep == LudoPath.homeLaneStartStep) {
+        if (destinationUsesHomeLane && nextStep == LudoPath.homeLaneStartStep) {
           homeEntryPending = false;
         }
 
         step = nextStep;
 
         positions.add(
-          path.positionAt(
-            step: step,
-            useHomeLane: destinationUsesHomeLane,
-          ),
+          path.positionAt(step: step, useHomeLane: destinationUsesHomeLane),
         );
       }
     }
@@ -289,30 +300,52 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       _animationPath = positions;
     });
 
-    // وقت قصير لكل خانة، مع حد أدنى للحركة.
+    // تحديد مدة الحركة قبل تشغيل الأنيميشن.
     _controller.duration = Duration(
-      milliseconds: math.max(220, (positions.length - 1) * 115),
+      milliseconds: math.max(220, (positions.length - 1) * 180),
     );
 
+    // تشغيل الحركة من البداية.
+    _controller.forward(from: 0);
   }
 
   void _onAnimationStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed || !mounted) return;
+    if (status != AnimationStatus.completed || !mounted || _completingMove) {
+      return;
+    }
 
+    if (_animatingMove == null) return;
+
+    _completingMove = true;
+    unawaited(_completeAnimatedMove());
+  }
+
+  Future<void> _completeAnimatedMove() async {
     final move = _animatingMove;
-    if (move == null) return;
+    if (move == null) {
+      _completingMove = false;
+      return;
+    }
 
-    // بعد اكتمال الأنيميشن فقط، اطلب من الـ Provider تنفيذ الحركة
-    // عن طريق LudoGameEngine.
-    widget.onMoveTap(move);
+    try {
+      // انتظر اعتماد الحركة داخل الـ Provider ومحرك اللعبة.
+      await widget.onMoveTap(move);
+    } catch (error, stackTrace) {
+      debugPrint('Failed to complete animated move: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _animatingMove = null;
+          _animatingTokenId = null;
+          _animationPath = <Position>[];
+        });
 
-    setState(() {
-      _animatingMove = null;
-      _animatingTokenId = null;
-      _animationPath = <Position>[];
-    });
+        _controller.reset();
+      }
 
-    _controller.reset();
+      _completingMove = false;
+    }
   }
 
   void _onAnimationTick() {
@@ -321,9 +354,10 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     }
 
     final totalSteps = _animationPath.length - 1;
-    final currentStep = (_controller.value * totalSteps)
-        .floor()
-        .clamp(0, totalSteps);
+    final currentStep = (_controller.value * totalSteps).floor().clamp(
+      0,
+      totalSteps,
+    );
 
     if (currentStep <= _lastSoundStep) return;
 
@@ -335,9 +369,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   Future<void> _playStepSound() async {
     try {
       await _stepPlayer.stop();
-      await _stepPlayer.play(
-        AssetSource('audio/ludorank_token_step.wav'),
-      );
+      await _stepPlayer.play(AssetSource('audio/ludorank_token_step.mp3'));
     } catch (error) {
       debugPrint('Token movement sound failed: $error');
     }
@@ -365,7 +397,6 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     return Offset.lerp(from, to, fraction)!;
   }
 
-
   List<Widget> _buildTokenTargets({
     required double frame,
     required double innerSide,
@@ -392,9 +423,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
         final position = token.isInitial
             ? geometry.tokenHomePosition(
-          color: player.color,
-          tokenIndex: token.tokenIndex,
-        )
+                color: player.color,
+                tokenIndex: token.tokenIndex,
+              )
             : token.position;
 
         final center = geometry.cellCenter(position, innerSide);
@@ -413,9 +444,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected
-                        ? Colors.white
-                        : Colors.transparent,
+                    color: isSelected ? Colors.white : Colors.transparent,
                     width: 2,
                   ),
                 ),
@@ -445,16 +474,18 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     final widgets = <Widget>[];
 
     for (final entry in widget.legalMoveDestinations.entries) {
-      final candidates = entry.value.where((move) {
-        final matchesToken = switch (move) {
-          MoveToken(:final tokenId) => tokenId == selectedTokenId,
-          ExitToken(:final tokenId) => tokenId == selectedTokenId,
-        };
+      final candidates = entry.value
+          .where((move) {
+            final matchesToken = switch (move) {
+              MoveToken(:final tokenId) => tokenId == selectedTokenId,
+              ExitToken(:final tokenId) => tokenId == selectedTokenId,
+            };
 
-        return matchesToken &&
-            (widget.selectedRollSequence == null ||
-                move.rollSequence == widget.selectedRollSequence);
-      }).toList(growable: false);
+            return matchesToken &&
+                (widget.selectedRollSequence == null ||
+                    move.rollSequence == widget.selectedRollSequence);
+          })
+          .toList(growable: false);
 
       if (candidates.isEmpty) continue;
 
@@ -481,16 +512,10 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
               decoration: BoxDecoration(
                 color: const Color(0xDDFFFFFF),
                 borderRadius: BorderRadius.circular(size * .22),
-                border: Border.all(
-                  color: const Color(0xFFFFD166),
-                  width: 2,
-                ),
+                border: Border.all(color: const Color(0xFFFFD166), width: 2),
               ),
               child: Center(
-                child: MatchDieFace(
-                  value: diceValue,
-                  size: size * .85,
-                ),
+                child: MatchDieFace(value: diceValue, size: size * .85),
               ),
             ),
           ),
@@ -549,10 +574,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
               Color.lerp(tone, Colors.black, .30)!,
             ],
           ),
-          border: Border.all(
-            color: const Color(0xFFFFF4D8),
-            width: 2,
-          ),
+          border: Border.all(color: const Color(0xFFFFF4D8), width: 2),
           boxShadow: const <BoxShadow>[
             BoxShadow(
               color: Color(0x99000000),
@@ -561,17 +583,129 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
             ),
           ],
         ),
-        child: const Icon(
-          Icons.person,
-          color: Color(0xFFFFF9EB),
-          size: 20,
-        ),
+        child: const Icon(Icons.person, color: Color(0xFFFFF9EB), size: 2),
       ),
     );
   }
 
+  Widget _buildSelectedTokenDice({
+    required double frame,
+    required double innerSide,
+  }) {
+    final tokenId = widget.selectedTokenId;
 
+    if (tokenId == null || widget.selectableRolls.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    LudoPlayer? owner;
+    LudoToken? token;
+
+    for (final player in widget.players) {
+      for (final playerToken in player.tokens) {
+        if (playerToken.id == tokenId) {
+          owner = player;
+          token = playerToken;
+          break;
+        }
+      }
+
+      if (owner != null) break;
+    }
+
+    if (owner == null || token == null) {
+      return const SizedBox.shrink();
+    }
+
+    final color = matchUiColorFor(owner.color);
+    const dieSize = 25.0;
+    const spacing = 4.0;
+
+    final rolls = widget.selectableRolls.rolls;
+    final totalWidth = rolls.length * dieSize + (rolls.length - 1) * spacing;
+
+    final geometry = LudoBoardGeometry.instance;
+
+    Offset tokenCenter() {
+      if (_animatingTokenId == tokenId &&
+          _animatingMove != null &&
+          _animationPath.length > 1) {
+        return _animatedCenter(innerSide);
+      }
+
+      final position = token!.isInitial
+          ? geometry.tokenHomePosition(
+              color: owner!.color,
+              tokenIndex: token.tokenIndex,
+            )
+          : token.position;
+
+      return geometry.cellCenter(position, innerSide);
+    }
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final center = tokenCenter();
+
+        return Positioned(
+          left: frame + center.dx - totalWidth / 2,
+          top: frame + center.dy - dieSize * 1.65,
+          width: totalWidth,
+          height: dieSize,
+          child: child!,
+        );
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (var index = 0; index < rolls.length; index++) ...[
+            if (index > 0) const SizedBox(width: spacing),
+
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(7),
+                onTap: _animatingMove != null
+                    ? null
+                    : () => widget.onAvailableRollTap(rolls[index].sequence),
+                child: Container(
+                  width: dieSize,
+                  height: dieSize,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF181321),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color:
+                          widget.selectedRollSequence == rolls[index].sequence
+                          ? const Color(0xFFFFD166)
+                          : color,
+                      width:
+                          widget.selectedRollSequence == rolls[index].sequence
+                          ? 2
+                          : 1.3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: .35),
+                        blurRadius: 5,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: MatchDieFace(value: rolls[index].value, size: 19),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
+
 /*class _BoardToken {
   final LudoPlayer player;
   final LudoToken token;
@@ -582,5 +716,4 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     required this.token,
     required this.position,
   });
-}
-*/
+}*/

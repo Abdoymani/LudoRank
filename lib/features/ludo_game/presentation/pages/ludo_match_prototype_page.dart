@@ -54,10 +54,8 @@ class _LudoMatchPrototypePageState extends State<LudoMatchPrototypePage> {
     ),
   ];
 
-  List<LudoPlayer> get _players => _specs
-      .take(_playerCount)
-      .map(_makeDemoPlayer)
-      .toList(growable: false);
+  List<LudoPlayer> get _players =>
+      _specs.take(_playerCount).map(_makeDemoPlayer).toList(growable: false);
 
   LudoPlayer _makeDemoPlayer(_DemoPlayerSpec spec) {
     final path = _pathFor(spec.color);
@@ -148,10 +146,10 @@ class _LudoMatchPrototypePageState extends State<LudoMatchPrototypePage> {
     final red = playersByColor[LudoPlayerColor.red];
     final blue = playersByColor[LudoPlayerColor.blue];
 
-    final topHasCurrent = _isCurrent(green, currentPlayer) ||
-        _isCurrent(yellow, currentPlayer);
-    final bottomHasCurrent = _isCurrent(red, currentPlayer) ||
-        _isCurrent(blue, currentPlayer);
+    final topHasCurrent =
+        _isCurrent(green, currentPlayer) || _isCurrent(yellow, currentPlayer);
+    final bottomHasCurrent =
+        _isCurrent(red, currentPlayer) || _isCurrent(blue, currentPlayer);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -203,7 +201,9 @@ class _LudoMatchPrototypePageState extends State<LudoMatchPrototypePage> {
               final sidePadding = width < 360 ? 12.0 : 14.0;
               final topHeight = topHasCurrent
                   ? activeCardHeight
-                  : ((green != null || yellow != null) ? inactiveCardHeight : 0.0);
+                  : ((green != null || yellow != null)
+                        ? inactiveCardHeight
+                        : 0.0);
               final bottomHeight = bottomHasCurrent
                   ? activeCardHeight
                   : ((red != null || blue != null) ? inactiveCardHeight : 0.0);
@@ -212,7 +212,12 @@ class _LudoMatchPrototypePageState extends State<LudoMatchPrototypePage> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(sidePadding, 5, sidePadding, 5),
+                    padding: EdgeInsets.fromLTRB(
+                      sidePadding,
+                      5,
+                      sidePadding,
+                      5,
+                    ),
                     child: Column(
                       children: <Widget>[
                         if (topHeight > 0)
@@ -237,7 +242,9 @@ class _LudoMatchPrototypePageState extends State<LudoMatchPrototypePage> {
                                 );
                                 return SizedBox.square(
                                   dimension: side,
-                                  child: LudoPrototypeBoardFrame(players: players),
+                                  child: LudoPrototypeBoardFrame(
+                                    players: players,
+                                  ),
                                 );
                               },
                             ),
@@ -268,10 +275,8 @@ class _LudoMatchPrototypePageState extends State<LudoMatchPrototypePage> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Colors.white54,
-                                fontSize: 9,
-                              ),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: Colors.white54, fontSize: 9),
                         ),
                       ],
                     ),
@@ -370,4 +375,3 @@ class _DemoPlayerSpec {
     required this.hasCaptured,
   });
 }
-

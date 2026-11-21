@@ -38,6 +38,8 @@ class MatchGameProvider extends ChangeNotifier {
   bool _isLoading = false;
 
   String? _error;
+  bool _isSavingSnapshot = false;
+  bool _snapshotSaveFailed = false;
 
   MatchGameProvider({required this.service});
   // ============================================================
@@ -156,6 +158,15 @@ class MatchGameProvider extends ChangeNotifier {
     await executeMove(move);
   }
 
+  // ===========================================================
+  // وأضف Getters في قسم UI STATE:
+  // ===========================================================
+  bool get isSavingSnapshot => _isSavingSnapshot;
+
+  bool get hasSnapshotSaveError => _snapshotSaveFailed;
+
+  bool get isSnapshotSaveBlocked => _isSavingSnapshot || _snapshotSaveFailed;
+
   // ============================================================
   // RESULT
   // ============================================================
@@ -221,6 +232,7 @@ class MatchGameProvider extends ChangeNotifier {
   bool get canRollDice {
     return isStarted &&
         !isLoading &&
+        !isSnapshotSaveBlocked &&
         !isGameFinished &&
         turnState?.isRolling == true;
   }
@@ -228,6 +240,7 @@ class MatchGameProvider extends ChangeNotifier {
   bool get canExecuteMove {
     return isStarted &&
         !isLoading &&
+        !isSnapshotSaveBlocked &&
         !isGameFinished &&
         turnState?.isPlaying == true &&
         availableMoves.isNotEmpty;
@@ -280,6 +293,8 @@ class MatchGameProvider extends ChangeNotifier {
 
     _selectedTokenId = null;
     _selectedRollSequence = null;
+    _isSavingSnapshot = false;
+    _snapshotSaveFailed = false;
 
     _completedPlayers.clear();
 
@@ -299,6 +314,62 @@ class MatchGameProvider extends ChangeNotifier {
       _setLoading(false);
     }
   }
+  // ============================================================
+  //
+  // ============================================================
+
+  // ============================================================
+  // RESUME MATCH
+  // ============================================================
+
+  /// Restores an existing Playing Match from its saved snapshot.
+  ///
+  /// This method does NOT start a new match and does NOT reset
+  /// the restored LudoGameEngine state.
+  Future<void> resumeMatch({required String matchId}) async {
+    // منع الاحتفاظ بأي اختيارات أو حركة معلقة من جلسة سابقة.
+    _session = null;
+    _matchStatus = null;
+
+    _selectedTokenId = null;
+    _selectedRollSequence = null;
+
+    _pendingAutoMove = null;
+    _isAutoMoveExecuting = false;
+
+    _isSavingSnapshot = false;
+    _snapshotSaveFailed = false;
+
+    _completedPlayers.clear();
+
+    _error = null;
+
+    _setLoading(true);
+
+    try {
+      // الاستعادة تتم من الخدمة مباشرة، وليس من startMatch.
+      final restoredSession = await service.resumeMatch(matchId: matchId);
+
+      _session = restoredSession;
+      _matchStatus = restoredSession.match.status;
+    } catch (e) {
+      _session = null;
+      _matchStatus = null;
+      if (e is StateError &&
+          e.toString().contains('لا توجد Snapshot محفوظة للمباراة')) {
+        _error =
+            'لا يمكن استكمال هذه المباراة. لا توجد نسخة محفوظة من حالة اللعب، '
+            'لأن المباراة بدأت قبل تفعيل نظام الحفظ والاستعادة. '
+            'يمكنك بدء مباراة جديدة.';
+      } else {
+        _error =
+            'تعذر استكمال المباراة بسبب مشكلة في البيانات المحفوظة. '
+            'لم يتم حذف المباراة أو بيانات البطولة.';
+      }
+    } finally {
+      _setLoading(false);
+    }
+  }
 
   // ============================================================
   // ROLL DICE
@@ -312,11 +383,12 @@ class MatchGameProvider extends ChangeNotifier {
   /// - multiple sixes
   /// - third-six cancellation
   /// - no-legal-move handling
-  void rollDice() {
+  Future<void> rollDice() async {
     final currentSession = _session;
 
     if (currentSession == null ||
         isLoading ||
+        isSnapshotSaveBlocked ||
         isGameFinished ||
         turnState?.isRolling != true) {
       return;
@@ -329,19 +401,38 @@ class MatchGameProvider extends ChangeNotifier {
       _selectedRollSequence = null;
       _pendingAutoMove = null;
       _isAutoMoveExecuting = false;
-      //
 
       // المحرك وحده مسؤول عن قواعد رمي النرد.
       currentSession.engine.rollDice();
 
-      // اكتشاف الحركة الوحيدة من قائمة الحركات القانونية.
+      // الحفاظ على منطق اكتشاف الحركة الوحيدة كما هو.
       final legalMoves = availableMoves;
 
       if (turnState?.isPlaying == true && legalMoves.length == 1) {
         _pendingAutoMove = legalMoves.single;
       }
 
+      // قفل اللعب قبل بدء الحفظ.
+      _isSavingSnapshot = true;
+      _snapshotSaveFailed = false;
+
       notifyListeners();
+
+      try {
+        await service.saveSnapshot(session: currentSession);
+
+        _isSavingSnapshot = false;
+        _snapshotSaveFailed = false;
+
+        notifyListeners();
+      } catch (e) {
+        _isSavingSnapshot = false;
+        _snapshotSaveFailed = true;
+
+        _error = 'تعذر حفظ حالة الرمية: $e';
+
+        notifyListeners();
+      }
     } catch (e) {
       _error = e.toString();
       _pendingAutoMove = null;
@@ -350,11 +441,39 @@ class MatchGameProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> retrySnapshotSave() async {
+    final currentSession = _session;
+
+    if (currentSession == null || _isSavingSnapshot || !_snapshotSaveFailed) {
+      return;
+    }
+
+    _isSavingSnapshot = true;
+
+    notifyListeners();
+
+    try {
+      await service.saveSnapshot(session: currentSession);
+
+      _snapshotSaveFailed = false;
+      _error = null;
+    } catch (e) {
+      _snapshotSaveFailed = true;
+      _error = 'فشلت إعادة حفظ حالة الرمية: $e';
+    } finally {
+      _isSavingSnapshot = false;
+      notifyListeners();
+    }
+  }
+
   // ===========================================================
   //  executePendingAutoMove
   //============================================================
   Future<void> executePendingAutoMove() async {
-    if (_isAutoMoveExecuting || isLoading || isGameFinished) {
+    if (_isAutoMoveExecuting ||
+        isLoading ||
+        isSnapshotSaveBlocked ||
+        isGameFinished) {
       return;
     }
 
@@ -412,6 +531,9 @@ class MatchGameProvider extends ChangeNotifier {
   /// Multiple moves  -> select the token and show its move options.
   /// No legal moves  -> do not move the token.
   Future<void> handleTokenTap(LudoToken token) async {
+    if (isSnapshotSaveBlocked) {
+      return;
+    }
     final currentSession = _session;
     final activePlayer = currentPlayer;
 
@@ -441,7 +563,8 @@ class MatchGameProvider extends ChangeNotifier {
           .toList(growable: false);
 
       if (matchingMoves.length == 1) {
-        await executeMove(matchingMoves.single);
+        _pendingAutoMove = matchingMoves.single;
+        notifyListeners();
         return;
       }
 
@@ -461,7 +584,8 @@ class MatchGameProvider extends ChangeNotifier {
 
     // لمسة واحدة تكفي عندما توجد حركة قانونية واحدة فقط.
     if (tokenMoves.length == 1) {
-      await executeMove(tokenMoves.single);
+      _pendingAutoMove = tokenMoves.single;
+      notifyListeners();
       return;
     }
 
@@ -507,6 +631,10 @@ class MatchGameProvider extends ChangeNotifier {
   /// If the move finishes the complete Ludo game,
   /// the provider automatically persists the Match.
   Future<void> executeMove(MoveOption move) async {
+    if (isSnapshotSaveBlocked || isLoading || isGameFinished) {
+      return;
+    }
+
     final currentSession = _session;
 
     if (_isAutoMoveExecuting &&
@@ -523,27 +651,48 @@ class MatchGameProvider extends ChangeNotifier {
     try {
       _error = null;
 
+      // 1. تنفيذ الحركة من خلال المحرك فقط.
       currentSession.engine.executeMove(move);
 
+      // 2. مسح اختيارات اللاعب والحركة المعلقة.
       _selectedTokenId = null;
       _selectedRollSequence = null;
       _pendingAutoMove = null;
-      _selectedTokenId = null;
-      _selectedRollSequence = null;
 
-      // Immediately update the game UI.
+      // 3. لو المباراة انتهت، نحفظ النتيجة النهائية.
+      // لا نحفظ Snapshot عادية لحالة منتهية.
+      if (currentSession.isFinished) {
+        notifyListeners();
+
+        if (_matchStatus != MatchStatus.finished) {
+          await _completeFinishedMatch();
+        }
+
+        return;
+      }
+
+      // 4. قفل اللعب أثناء حفظ Snapshot.
+      _isSavingSnapshot = true;
+      _snapshotSaveFailed = false;
+
       notifyListeners();
 
-      // ========================================================
-      // GAME FINISHED
-      // ========================================================
+      // 5. حفظ الحالة الجديدة بعد الحركة.
+      try {
+        await service.saveSnapshot(session: currentSession);
 
-      if (currentSession.isFinished && _matchStatus != MatchStatus.finished) {
-        await _completeFinishedMatch();
+        _isSavingSnapshot = false;
+        _snapshotSaveFailed = false;
+        _error = null;
+      } catch (e) {
+        _isSavingSnapshot = false;
+        _snapshotSaveFailed = true;
+        _error = 'تعذر حفظ حالة الحركة: $e';
       }
+
+      notifyListeners();
     } catch (e) {
       _error = e.toString();
-
       notifyListeners();
     }
   }
@@ -554,6 +703,7 @@ class MatchGameProvider extends ChangeNotifier {
   Future<void> handleAvailableRollTap(int sequence) async {
     if (turnState?.isPlaying != true ||
         isLoading ||
+        isSnapshotSaveBlocked ||
         isGameFinished ||
         !availableRolls.containsSequence(sequence)) {
       return;
@@ -581,7 +731,8 @@ class MatchGameProvider extends ChangeNotifier {
 
     // عند تحديد توكن، اختيار النرد ينفذ الحركة القانونية المرتبطة به.
     if (_selectedTokenId != null && options.length == 1) {
-      await executeMove(options.single);
+      _pendingAutoMove = options.single;
+      notifyListeners();
       return;
     }
 
@@ -683,6 +834,9 @@ class MatchGameProvider extends ChangeNotifier {
     _isLoading = false;
     _pendingAutoMove = null;
     _isAutoMoveExecuting = false;
+
+    _isSavingSnapshot = false;
+    _snapshotSaveFailed = false;
 
     notifyListeners();
   }

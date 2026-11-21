@@ -1,5 +1,5 @@
 import 'package:go_router/go_router.dart';
-
+import 'package:ludo_rank/features/splash/presentation/pages/splash_page.dart';
 import 'package:ludo_rank/features/players/presentation/pages/players_page.dart';
 
 import '../features/home/presentation/pages/home_page.dart';
@@ -8,9 +8,15 @@ import 'app_routes.dart';
 import 'package:ludo_rank/features/tournaments/presentation/pages/tournaments_page.dart';
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: AppRoutes.home,
+  initialLocation: AppRoutes.splash,
 
   routes: [
+    GoRoute(
+      path: AppRoutes.splash,
+      name: 'splash',
+      builder: (context, state) => const SplashPage(),
+    ),
+
     GoRoute(
       path: AppRoutes.home,
       name: 'home',

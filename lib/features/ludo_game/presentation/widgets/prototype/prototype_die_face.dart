@@ -4,11 +4,7 @@ class PrototypeDieFace extends StatelessWidget {
   final int? value;
   final double size;
 
-  const PrototypeDieFace({
-    super.key,
-    required this.value,
-    this.size = 34,
-  });
+  const PrototypeDieFace({super.key, required this.value, this.size = 34});
 
   @override
   Widget build(BuildContext context) {
@@ -51,17 +47,25 @@ class _DiePipsPainter extends CustomPainter {
     2: <Offset>[Offset(.28, .28), Offset(.72, .72)],
     3: <Offset>[Offset(.28, .28), Offset(.5, .5), Offset(.72, .72)],
     4: <Offset>[
-      Offset(.28, .28), Offset(.72, .28),
-      Offset(.28, .72), Offset(.72, .72),
+      Offset(.28, .28),
+      Offset(.72, .28),
+      Offset(.28, .72),
+      Offset(.72, .72),
     ],
     5: <Offset>[
-      Offset(.28, .28), Offset(.72, .28), Offset(.5, .5),
-      Offset(.28, .72), Offset(.72, .72),
+      Offset(.28, .28),
+      Offset(.72, .28),
+      Offset(.5, .5),
+      Offset(.28, .72),
+      Offset(.72, .72),
     ],
     6: <Offset>[
-      Offset(.28, .25), Offset(.72, .25),
-      Offset(.28, .5), Offset(.72, .5),
-      Offset(.28, .75), Offset(.72, .75),
+      Offset(.28, .25),
+      Offset(.72, .25),
+      Offset(.28, .5),
+      Offset(.72, .5),
+      Offset(.28, .75),
+      Offset(.72, .75),
     ],
   };
 

@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
@@ -25,12 +27,15 @@ import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart'
 import 'package:ludo_rank/features/ludo_game/domain/models/dice_roll.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/turn_state.dart';
 
+import '../../domain/services/match_game_service_test.dart';
+
 void main() {
   group('MatchGameProvider', () {
     late FakeMatchRepository matchRepository;
     late FakeMatchPlayerRepository matchPlayerRepository;
     late FakeMatchGameService service;
     late MatchGameProvider provider;
+    late FakeMatchGameStateRepository gameStateRepository;
 
     late Match match;
     late List<MatchPlayer> matchPlayers;
@@ -40,10 +45,12 @@ void main() {
     setUp(() {
       matchRepository = FakeMatchRepository();
       matchPlayerRepository = FakeMatchPlayerRepository();
+      gameStateRepository = FakeMatchGameStateRepository();
 
       service = FakeMatchGameService(
         matchRepository: matchRepository,
         matchPlayerRepository: matchPlayerRepository,
+        gameStateRepository: gameStateRepository,
       );
 
       provider = MatchGameProvider(service: service);
@@ -154,6 +161,203 @@ void main() {
     });
 
     // ==========================================================
+    // RESUME MATCH SUCCESS
+    // ==========================================================
+
+    test('resumeMatch restores the saved session and game state', () async {
+      const roll = DiceRoll(value: 6, sequence: 1);
+
+      final savedState = createStartedState().copyWith(
+        turnState: const TurnState(
+          playerId: 'player-1',
+          rolls: [roll],
+          availableRolls: AvailableRolls(rolls: [roll]),
+          phase: TurnPhase.playing,
+          sixRollCount: 1,
+        ),
+      );
+
+      final engine = LudoGameEngine(initialState: savedState);
+
+      final restoredSession = MatchGameSession(
+        match: match.copyWith(status: MatchStatus.playing),
+        matchPlayers: matchPlayers,
+        engine: engine,
+      );
+
+      service.resumeSession = restoredSession;
+
+      // إنشاء جلسة قديمة لاختبار تنظيف الحالة السابقة.
+      final oldSession = createSession(
+        match: match.copyWith(status: MatchStatus.playing),
+      );
+
+      service.startSession = oldSession;
+
+      await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+      provider.selectToken('player-1-token-0');
+
+      expect(provider.selectedTokenId, isNotNull);
+
+      final loadingStates = <bool>[];
+
+      provider.addListener(() {
+        loadingStates.add(provider.isLoading);
+      });
+
+      await provider.resumeMatch(matchId: match.id);
+
+      // الجلسة والمحرك المستعادان هما نفس الكائنات.
+      expect(provider.session, same(restoredSession));
+      expect(provider.session!.engine, same(engine));
+
+      // حالة المباراة.
+      expect(provider.matchStatus, MatchStatus.playing);
+      expect(provider.isStarted, isTrue);
+      expect(provider.isPlaying, isTrue);
+      expect(provider.isFinished, isFalse);
+
+      // حالة الدور المستعاد.
+      expect(provider.currentPlayerId, 'player-1');
+      expect(provider.turnState!.playerId, 'player-1');
+      expect(provider.turnState!.isPlaying, isTrue);
+
+      // حالة النرد والرميات.
+      expect(provider.state!.turnState.rolls, [roll]);
+      expect(provider.availableRolls.rolls, [roll]);
+      expect(provider.availableRolls.rolls.single.value, 6);
+      expect(provider.turnState!.sixRollCount, 1);
+
+      // تنظيف اختيارات الواجهة القديمة.
+      expect(provider.selectedTokenId, isNull);
+      expect(provider.selectedRollSequence, isNull);
+      expect(provider.pendingAutoMove, isNull);
+      expect(provider.isAutoMoveExecuting, isFalse);
+
+      // التأكد من استدعاء resumeMatch فقط دون بدء مباراة جديدة.
+      expect(service.resumeMatchCallCount, 1);
+      expect(service.startMatchCallCount, 1);
+
+      // حالة التحميل والأخطاء.
+      expect(provider.error, isNull);
+      expect(provider.isLoading, isFalse);
+      expect(loadingStates, contains(true));
+      expect(loadingStates.last, isFalse);
+    });
+    // ==========================================================
+    // RESUME MATCH ERROR
+    // ==========================================================
+
+    test(
+      'resumeMatch stores error and clears stale session on failure',
+      () async {
+        final oldSession = createSession(
+          match: match.copyWith(status: MatchStatus.playing),
+        );
+
+        service.startSession = oldSession;
+
+        await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+        provider.selectToken('player-1-token-0');
+
+        expect(provider.session, same(oldSession));
+        expect(provider.selectedTokenId, isNotNull);
+
+        service.resumeMatchError = StateError('cannot resume');
+
+        await provider.resumeMatch(matchId: match.id);
+
+        // لا نحتفظ بالجلسة القديمة بعد فشل الاستعادة.
+        expect(provider.session, isNull);
+        expect(provider.matchStatus, isNull);
+
+        expect(provider.isStarted, isFalse);
+        expect(provider.isPlaying, isFalse);
+
+        // الخطأ محفوظ والتحميل انتهى.
+        expect(provider.error, contains('تعذر استكمال المباراة'));
+
+        expect(provider.isLoading, isFalse);
+
+        // الاختيارات والحركات المؤقتة تم تنظيفها.
+        expect(provider.selectedTokenId, isNull);
+        expect(provider.selectedRollSequence, isNull);
+        expect(provider.pendingAutoMove, isNull);
+        expect(provider.isAutoMoveExecuting, isFalse);
+
+        // لم يتم استدعاء startMatch مرة أخرى.
+        expect(service.resumeMatchCallCount, 1);
+        expect(service.startMatchCallCount, 1);
+      },
+    );
+    // =====================================================
+    // RESUME MATCH ERROR - NO SNAPSHOT
+    // =====================================================
+
+    test(
+      'resumeMatch shows friendly message when snapshot is missing',
+      () async {
+        service.resumeMatchError = StateError(
+          'لا توجد Snapshot محفوظة للمباراة ${match.id}.',
+        );
+
+        await provider.resumeMatch(matchId: match.id);
+
+        expect(provider.error, contains('لا توجد نسخة محفوظة من حالة اللعب'));
+
+        expect(provider.session, isNull);
+        expect(provider.matchStatus, isNull);
+        expect(provider.isLoading, isFalse);
+
+        expect(service.resumeMatchCallCount, 1);
+        expect(service.startMatchCallCount, 0);
+      },
+    );
+    // ========================================================
+    //  rollDice blocks another roll while snapshot is saving
+    // ======================================================
+
+    test('rollDice blocks another roll while snapshot is saving', () async {
+      final engine = FakeLudoGameEngine(initialState: createStartedState());
+
+      service.startSession = MatchGameSession(
+        match: match.copyWith(status: MatchStatus.playing),
+        matchPlayers: matchPlayers,
+        engine: engine,
+      );
+
+      await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+      final saveCompleter = Completer<void>();
+      gameStateRepository.saveCompleter = saveCompleter;
+
+      // ابدأ الرمية الأولى بدون انتظار انتهاء الحفظ.
+      final firstRoll = provider.rollDice();
+
+      expect(provider.isSavingSnapshot, isTrue);
+      expect(engine.rollDiceCallCount, 1);
+      expect(gameStateRepository.saveCallCount, 1);
+
+      // محاولة رمية ثانية أثناء الحفظ.
+      await provider.rollDice();
+
+      // يجب ألا ينفذ المحرك رمية ثانية.
+      expect(engine.rollDiceCallCount, 1);
+      expect(gameStateRepository.saveCallCount, 1);
+
+      // اسمح للحفظ الأول بالانتهاء.
+      saveCompleter.complete();
+
+      await firstRoll;
+
+      expect(provider.isSavingSnapshot, isFalse);
+      expect(provider.hasSnapshotSaveError, isFalse);
+      expect(provider.error, isNull);
+    });
+
+    // ==========================================================
     // SELECT TOKEN
     // ==========================================================
 
@@ -181,7 +385,7 @@ void main() {
     // ROLL DICE
     // ==========================================================
 
-    test('rollDice delegates to the Ludo engine', () async {
+    test('rollDice saves snapshot after engine roll', () async {
       final engine = FakeLudoGameEngine(initialState: createStartedState());
 
       final session = MatchGameSession(
@@ -194,13 +398,74 @@ void main() {
 
       await provider.startMatch(matchId: match.id, playerNames: playerNames);
 
-      provider.rollDice();
+      await provider.rollDice();
 
       expect(engine.rollDiceCallCount, 1);
 
+      expect(gameStateRepository.saveCallCount, 1);
+
+      expect(gameStateRepository.snapshots[match.id], equals(engine.state));
+
+      expect(provider.isSavingSnapshot, isFalse);
+      expect(provider.hasSnapshotSaveError, isFalse);
       expect(provider.error, isNull);
     });
 
+    test('failed snapshot save blocks another dice roll', () async {
+      final engine = FakeLudoGameEngine(initialState: createStartedState());
+
+      service.startSession = MatchGameSession(
+        match: match.copyWith(status: MatchStatus.playing),
+        matchPlayers: matchPlayers,
+        engine: engine,
+      );
+
+      await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+      gameStateRepository.throwExceptionOnSave = true;
+
+      await provider.rollDice();
+
+      expect(engine.rollDiceCallCount, 1);
+      expect(gameStateRepository.saveCallCount, 1);
+
+      expect(provider.hasSnapshotSaveError, isTrue);
+      expect(provider.canRollDice, isFalse);
+      expect(provider.error, contains('Snapshot save failed'));
+
+      await provider.rollDice();
+
+      // لم يتم تنفيذ رمية ثانية.
+      expect(engine.rollDiceCallCount, 1);
+      expect(gameStateRepository.saveCallCount, 1);
+    });
+    test('retrySnapshotSave restores game input after success', () async {
+      final engine = FakeLudoGameEngine(initialState: createStartedState());
+
+      service.startSession = MatchGameSession(
+        match: match.copyWith(status: MatchStatus.playing),
+        matchPlayers: matchPlayers,
+        engine: engine,
+      );
+
+      await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+      gameStateRepository.throwExceptionOnSave = true;
+
+      await provider.rollDice();
+
+      expect(provider.hasSnapshotSaveError, isTrue);
+
+      gameStateRepository.throwExceptionOnSave = false;
+
+      await provider.retrySnapshotSave();
+
+      expect(gameStateRepository.saveCallCount, 2);
+
+      expect(provider.hasSnapshotSaveError, isFalse);
+      expect(provider.isSavingSnapshot, isFalse);
+      expect(provider.error, isNull);
+    });
     // ==========================================================
     // ROLL DICE ERROR
     // ==========================================================
@@ -260,6 +525,176 @@ void main() {
       expect(provider.selectedTokenId, isNull);
       expect(provider.selectedRollSequence, isNull);
 
+      expect(provider.error, isNull);
+    });
+
+    // ==========================================================
+    // executeMove saves snapshot after engine move
+    // ==========================================================
+
+    test('executeMove saves snapshot after engine move', () async {
+      final engine = LudoGameEngine(
+        initialState: LudoGameState.initial(
+          players: createStartedState().players,
+        ),
+      );
+
+      engine.startGame();
+      final session = MatchGameSession(
+        match: match.copyWith(status: MatchStatus.playing),
+        matchPlayers: matchPlayers,
+        engine: engine,
+      );
+
+      service.startSession = session;
+
+      await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+      // نجهز رمية قانونية من خلال المحرك الحقيقي.
+      engine.registerDiceRoll(value: 1, sequence: 1);
+
+      final legalMoves = engine.getValidMoves();
+
+      expect(legalMoves, isNotEmpty);
+
+      final move = legalMoves.first;
+
+      await provider.executeMove(move);
+
+      // الحركة نُفذت في المحرك.
+      expect(engine.state, isNotNull);
+
+      // تم حفظ Snapshot واحدة بعد الحركة.
+      expect(gameStateRepository.saveCallCount, 1);
+
+      // الحالة المحفوظة تطابق الحالة الحالية للمحرك.
+      expect(gameStateRepository.snapshots[match.id], equals(engine.state));
+
+      expect(provider.isSavingSnapshot, isFalse);
+      expect(provider.hasSnapshotSaveError, isFalse);
+      expect(provider.error, isNull);
+    });
+    // ===========================================================
+    // failed snapshot save blocks next move and retry does not execute move again
+    // ===========================================================
+
+    test(
+      'failed snapshot save blocks next move and retry does not execute move again',
+      () async {
+        final engine = FakeLudoGameEngine(initialState: createStartedState());
+
+        service.startSession = MatchGameSession(
+          match: match.copyWith(status: MatchStatus.playing),
+          matchPlayers: matchPlayers,
+          engine: engine,
+        );
+
+        await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+        final move = MoveToken(
+          tokenId: 'player-1-token-0',
+          steps: 1,
+          rollSequence: 1,
+        );
+
+        gameStateRepository.throwExceptionOnSave = true;
+
+        expect(provider.session, isNotNull);
+        expect(provider.isLoading, isFalse);
+        expect(provider.isGameFinished, isFalse);
+        expect(provider.isSnapshotSaveBlocked, isFalse);
+        expect(engine.isFinished, isFalse);
+        expect(provider.isAutoMoveExecuting, isFalse);
+        expect(provider.pendingAutoMove, isNull);
+
+        // تنفيذ الحركة الأولى.
+        await provider.executeMove(move);
+
+        expect(engine.executeMoveCallCount, 1);
+        expect(gameStateRepository.saveCallCount, 1);
+
+        // الحفظ فشل، وبالتالي يجب منع أي إدخال جديد.
+        expect(provider.hasSnapshotSaveError, isTrue);
+        expect(provider.isSnapshotSaveBlocked, isTrue);
+
+        // محاولة تنفيذ نفس الحركة مرة أخرى.
+        await provider.executeMove(move);
+
+        // الحركة لم تتكرر.
+        expect(engine.executeMoveCallCount, 1);
+        expect(gameStateRepository.saveCallCount, 1);
+
+        // نصلح سبب فشل الحفظ.
+        gameStateRepository.throwExceptionOnSave = false;
+
+        // إعادة الحفظ فقط.
+        await provider.retrySnapshotSave();
+
+        expect(gameStateRepository.saveCallCount, 2);
+
+        // تأكيد أن الحركة لم تُنفذ مرة ثانية.
+        expect(engine.executeMoveCallCount, 1);
+
+        expect(provider.hasSnapshotSaveError, isFalse);
+        expect(provider.isSnapshotSaveBlocked, isFalse);
+        expect(provider.isSavingSnapshot, isFalse);
+        expect(provider.error, isNull);
+      },
+    );
+    // ==========================================================
+    // executeMove blocks another move while snapshot is saving
+    // ==========================================================
+
+    test('executeMove blocks another move while snapshot is saving', () async {
+      final engine = FakeLudoGameEngine(initialState: createStartedState());
+
+      service.startSession = MatchGameSession(
+        match: match.copyWith(status: MatchStatus.playing),
+        matchPlayers: matchPlayers,
+        engine: engine,
+      );
+
+      await provider.startMatch(matchId: match.id, playerNames: playerNames);
+
+      // نضبط Completer بعد بدء المباراة.
+      final saveCompleter = Completer<void>();
+
+      gameStateRepository.saveCompleter = saveCompleter;
+
+      final move = MoveToken(
+        tokenId: 'player-1-token-0',
+        steps: 1,
+        rollSequence: 1,
+      );
+
+      // نبدأ الحركة الأولى دون انتظار الحفظ.
+      final firstExecution = provider.executeMove(move);
+
+      expect(provider.isSavingSnapshot, isTrue);
+      expect(engine.executeMoveCallCount, 1);
+      expect(gameStateRepository.saveCallCount, 1);
+      expect(provider.session, isNotNull);
+      expect(provider.isLoading, isFalse);
+      expect(provider.isGameFinished, isFalse);
+      expect(provider.isSnapshotSaveBlocked, isTrue);
+      expect(engine.isFinished, isFalse);
+      expect(provider.isAutoMoveExecuting, isFalse);
+      expect(provider.pendingAutoMove, isNull);
+
+      // محاولة حركة ثانية أثناء الحفظ.
+      await provider.executeMove(move);
+
+      // يجب ألا ينفذ المحرك حركة أخرى.
+      expect(engine.executeMoveCallCount, 1);
+      expect(gameStateRepository.saveCallCount, 1);
+
+      // نسمح للحفظ الأول بالانتهاء.
+      saveCompleter.complete();
+
+      await firstExecution;
+
+      expect(provider.isSavingSnapshot, isFalse);
+      expect(provider.hasSnapshotSaveError, isFalse);
       expect(provider.error, isNull);
     });
 
@@ -757,7 +1192,11 @@ class FakeMatchGameService extends MatchGameService {
   FakeMatchGameService({
     required super.matchRepository,
     required super.matchPlayerRepository,
+    required super.gameStateRepository,
   });
+  MatchGameSession? resumeSession;
+  StateError? resumeMatchError;
+  int resumeMatchCallCount = 0;
 
   MatchGameSession? startSession;
 
@@ -785,6 +1224,23 @@ class FakeMatchGameService extends MatchGameService {
 
     if (session == null) {
       throw StateError('Fake startSession was not configured.');
+    }
+
+    return session;
+  }
+
+  @override
+  Future<MatchGameSession> resumeMatch({required String matchId}) async {
+    resumeMatchCallCount++;
+
+    if (resumeMatchError != null) {
+      throw resumeMatchError!;
+    }
+
+    final session = resumeSession;
+
+    if (session == null) {
+      throw StateError('Fake resumeSession was not configured.');
     }
 
     return session;

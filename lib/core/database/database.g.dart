@@ -1321,6 +1321,17 @@ class $MatchesTable extends Matches with TableInfo<$MatchesTable, MatchData> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _gameStateJsonMeta = const VerificationMeta(
+    'gameStateJson',
+  );
+  @override
+  late final GeneratedColumn<String> gameStateJson = GeneratedColumn<String>(
+    'game_state_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1330,6 +1341,7 @@ class $MatchesTable extends Matches with TableInfo<$MatchesTable, MatchData> {
     createdAt,
     updatedAt,
     playersCount,
+    gameStateJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1399,6 +1411,15 @@ class $MatchesTable extends Matches with TableInfo<$MatchesTable, MatchData> {
         ),
       );
     }
+    if (data.containsKey('game_state_json')) {
+      context.handle(
+        _gameStateJsonMeta,
+        gameStateJson.isAcceptableOrUnknown(
+          data['game_state_json']!,
+          _gameStateJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1436,6 +1457,10 @@ class $MatchesTable extends Matches with TableInfo<$MatchesTable, MatchData> {
         DriftSqlType.int,
         data['${effectivePrefix}players_count'],
       )!,
+      gameStateJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}game_state_json'],
+      ),
     );
   }
 
@@ -1469,6 +1494,11 @@ class MatchData extends DataClass implements Insertable<MatchData> {
 
   /// Number of players
   final int playersCount;
+
+  /// Serialized LudoGameState JSON.
+  ///
+  /// Null for matches that do not have a saved game state yet.
+  final String? gameStateJson;
   const MatchData({
     required this.id,
     required this.tournamentId,
@@ -1477,6 +1507,7 @@ class MatchData extends DataClass implements Insertable<MatchData> {
     required this.createdAt,
     required this.updatedAt,
     required this.playersCount,
+    this.gameStateJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1488,6 +1519,9 @@ class MatchData extends DataClass implements Insertable<MatchData> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['players_count'] = Variable<int>(playersCount);
+    if (!nullToAbsent || gameStateJson != null) {
+      map['game_state_json'] = Variable<String>(gameStateJson);
+    }
     return map;
   }
 
@@ -1500,6 +1534,9 @@ class MatchData extends DataClass implements Insertable<MatchData> {
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       playersCount: Value(playersCount),
+      gameStateJson: gameStateJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gameStateJson),
     );
   }
 
@@ -1516,6 +1553,7 @@ class MatchData extends DataClass implements Insertable<MatchData> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       playersCount: serializer.fromJson<int>(json['playersCount']),
+      gameStateJson: serializer.fromJson<String?>(json['gameStateJson']),
     );
   }
   @override
@@ -1529,6 +1567,7 @@ class MatchData extends DataClass implements Insertable<MatchData> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'playersCount': serializer.toJson<int>(playersCount),
+      'gameStateJson': serializer.toJson<String?>(gameStateJson),
     };
   }
 
@@ -1540,6 +1579,7 @@ class MatchData extends DataClass implements Insertable<MatchData> {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? playersCount,
+    Value<String?> gameStateJson = const Value.absent(),
   }) => MatchData(
     id: id ?? this.id,
     tournamentId: tournamentId ?? this.tournamentId,
@@ -1548,6 +1588,9 @@ class MatchData extends DataClass implements Insertable<MatchData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     playersCount: playersCount ?? this.playersCount,
+    gameStateJson: gameStateJson.present
+        ? gameStateJson.value
+        : this.gameStateJson,
   );
   MatchData copyWithCompanion(MatchesCompanion data) {
     return MatchData(
@@ -1564,6 +1607,9 @@ class MatchData extends DataClass implements Insertable<MatchData> {
       playersCount: data.playersCount.present
           ? data.playersCount.value
           : this.playersCount,
+      gameStateJson: data.gameStateJson.present
+          ? data.gameStateJson.value
+          : this.gameStateJson,
     );
   }
 
@@ -1576,7 +1622,8 @@ class MatchData extends DataClass implements Insertable<MatchData> {
           ..write('status: $status, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('playersCount: $playersCount')
+          ..write('playersCount: $playersCount, ')
+          ..write('gameStateJson: $gameStateJson')
           ..write(')'))
         .toString();
   }
@@ -1590,6 +1637,7 @@ class MatchData extends DataClass implements Insertable<MatchData> {
     createdAt,
     updatedAt,
     playersCount,
+    gameStateJson,
   );
   @override
   bool operator ==(Object other) =>
@@ -1601,7 +1649,8 @@ class MatchData extends DataClass implements Insertable<MatchData> {
           other.status == this.status &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.playersCount == this.playersCount);
+          other.playersCount == this.playersCount &&
+          other.gameStateJson == this.gameStateJson);
 }
 
 class MatchesCompanion extends UpdateCompanion<MatchData> {
@@ -1612,6 +1661,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> playersCount;
+  final Value<String?> gameStateJson;
   final Value<int> rowid;
   const MatchesCompanion({
     this.id = const Value.absent(),
@@ -1621,6 +1671,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.playersCount = const Value.absent(),
+    this.gameStateJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MatchesCompanion.insert({
@@ -1631,6 +1682,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.playersCount = const Value.absent(),
+    this.gameStateJson = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        tournamentId = Value(tournamentId),
@@ -1644,6 +1696,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? playersCount,
+    Expression<String>? gameStateJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1654,6 +1707,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (playersCount != null) 'players_count': playersCount,
+      if (gameStateJson != null) 'game_state_json': gameStateJson,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1666,6 +1720,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? playersCount,
+    Value<String?>? gameStateJson,
     Value<int>? rowid,
   }) {
     return MatchesCompanion(
@@ -1676,6 +1731,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       playersCount: playersCount ?? this.playersCount,
+      gameStateJson: gameStateJson ?? this.gameStateJson,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1704,6 +1760,9 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
     if (playersCount.present) {
       map['players_count'] = Variable<int>(playersCount.value);
     }
+    if (gameStateJson.present) {
+      map['game_state_json'] = Variable<String>(gameStateJson.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1720,6 +1779,7 @@ class MatchesCompanion extends UpdateCompanion<MatchData> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('playersCount: $playersCount, ')
+          ..write('gameStateJson: $gameStateJson, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2600,7 +2660,7 @@ class $$PlayersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$PlayersTable, Player>(table),
                   $$PlayersTableReferences(db, table, e),
                 ),
               )
@@ -2617,10 +2677,11 @@ class $$PlayersTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (tournamentPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Player,
                           $PlayersTable,
-                          TournamentPlayer
+                          TournamentPlayer,
+                          $TournamentPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$PlayersTableReferences
@@ -2631,17 +2692,16 @@ class $$PlayersTableTableManager
                                 table,
                                 p0,
                               ).tournamentPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.playerId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'player_id',
                           typedResults: items,
                         ),
                       if (matchPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Player,
                           $PlayersTable,
-                          MatchPlayer
+                          MatchPlayer,
+                          $MatchPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$PlayersTableReferences
@@ -2652,10 +2712,8 @@ class $$PlayersTableTableManager
                                 table,
                                 p0,
                               ).matchPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.playerId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'player_id',
                           typedResults: items,
                         ),
                     ];
@@ -3023,7 +3081,7 @@ class $$TournamentsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$TournamentsTable, Tournament>(table),
                   $$TournamentsTableReferences(db, table, e),
                 ),
               )
@@ -3040,10 +3098,11 @@ class $$TournamentsTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (tournamentPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Tournament,
                           $TournamentsTable,
-                          TournamentPlayer
+                          TournamentPlayer,
+                          $TournamentPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$TournamentsTableReferences
@@ -3054,17 +3113,16 @@ class $$TournamentsTableTableManager
                                 table,
                                 p0,
                               ).tournamentPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.tournamentId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'tournament_id',
                           typedResults: items,
                         ),
                       if (matchesRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           Tournament,
                           $TournamentsTable,
-                          MatchData
+                          MatchData,
+                          $MatchesTable
                         >(
                           currentTable: table,
                           referencedTable: $$TournamentsTableReferences
@@ -3075,10 +3133,8 @@ class $$TournamentsTableTableManager
                                 table,
                                 p0,
                               ).matchesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.tournamentId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'tournament_id',
                           typedResults: items,
                         ),
                     ];
@@ -3425,7 +3481,7 @@ class $$TournamentPlayersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$TournamentPlayersTable, TournamentPlayer>(table),
                   $$TournamentPlayersTableReferences(db, table, e),
                 ),
               )
@@ -3515,6 +3571,7 @@ typedef $$MatchesTableCreateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> playersCount,
+      Value<String?> gameStateJson,
       Value<int> rowid,
     });
 typedef $$MatchesTableUpdateCompanionBuilder =
@@ -3526,6 +3583,7 @@ typedef $$MatchesTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> playersCount,
+      Value<String?> gameStateJson,
       Value<int> rowid,
     });
 
@@ -3605,6 +3663,11 @@ class $$MatchesTableFilterComposer
 
   ColumnFilters<int> get playersCount => $composableBuilder(
     column: $table.playersCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get gameStateJson => $composableBuilder(
+    column: $table.gameStateJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3696,6 +3759,11 @@ class $$MatchesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get gameStateJson => $composableBuilder(
+    column: $table.gameStateJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$TournamentsTableOrderingComposer get tournamentId {
     final $$TournamentsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3748,6 +3816,11 @@ class $$MatchesTableAnnotationComposer
 
   GeneratedColumn<int> get playersCount => $composableBuilder(
     column: $table.playersCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get gameStateJson => $composableBuilder(
+    column: $table.gameStateJson,
     builder: (column) => column,
   );
 
@@ -3835,6 +3908,7 @@ class $$MatchesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> playersCount = const Value.absent(),
+                Value<String?> gameStateJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MatchesCompanion(
                 id: id,
@@ -3844,6 +3918,7 @@ class $$MatchesTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 playersCount: playersCount,
+                gameStateJson: gameStateJson,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3855,6 +3930,7 @@ class $$MatchesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> playersCount = const Value.absent(),
+                Value<String?> gameStateJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MatchesCompanion.insert(
                 id: id,
@@ -3864,12 +3940,13 @@ class $$MatchesTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 playersCount: playersCount,
+                gameStateJson: gameStateJson,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$MatchesTable, MatchData>(table),
                   $$MatchesTableReferences(db, table, e),
                 ),
               )
@@ -3916,10 +3993,11 @@ class $$MatchesTableTableManager
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (matchPlayersRefs)
-                        await $_getPrefetchedData<
+                        await $_getPrefetchedDataByColumns<
                           MatchData,
                           $MatchesTable,
-                          MatchPlayer
+                          MatchPlayer,
+                          $MatchPlayersTable
                         >(
                           currentTable: table,
                           referencedTable: $$MatchesTableReferences
@@ -3930,10 +4008,8 @@ class $$MatchesTableTableManager
                                 table,
                                 p0,
                               ).matchPlayersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.matchId == item.id,
-                              ),
+                          currentColumn: 'id',
+                          referencedColumn: 'match_id',
                           typedResults: items,
                         ),
                     ];
@@ -4322,7 +4398,7 @@ class $$MatchPlayersTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$MatchPlayersTable, MatchPlayer>(table),
                   $$MatchPlayersTableReferences(db, table, e),
                 ),
               )

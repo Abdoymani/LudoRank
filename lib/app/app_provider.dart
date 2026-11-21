@@ -9,8 +9,15 @@ import 'package:ludo_rank/features/players/presentation/providers/player_provide
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 import 'package:ludo_rank/features/tournament_players/presentation/providers/tournament_player_provider.dart';
 
+import 'package:ludo_rank/app/theme_controller.dart';
+
+import 'package:hive_flutter/hive_flutter.dart';
+
 class AppProviders {
   static final providers = [
+    ChangeNotifierProvider<ThemeController>(
+      create: (_) => ThemeController(settingsBox: Hive.box('app_settings')),
+    ),
     ChangeNotifierProvider<HomeProvider>(create: (_) => sl<HomeProvider>()),
     ChangeNotifierProvider<PlayerProvider>(create: (_) => sl<PlayerProvider>()),
     ChangeNotifierProvider<TournamentProvider>(
