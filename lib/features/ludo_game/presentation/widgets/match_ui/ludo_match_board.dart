@@ -260,7 +260,12 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       positions.add(path.startingPosition);
     } else if (move is MoveToken) {
       var step = token.positionInPath;
-      var homeEntryPending = token.homeEntryPending;
+      var homeEntryPending =
+          token.homeEntryPending ||
+          path.isParkedOnMainLoopEnd(
+            step: token.positionInPath,
+            position: token.position,
+          );
       var destinationUsesHomeLane = false;
 
       for (var i = 0; i < move.steps; i++) {

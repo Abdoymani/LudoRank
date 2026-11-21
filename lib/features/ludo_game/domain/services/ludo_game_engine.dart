@@ -649,7 +649,18 @@ class LudoGameEngine {
 
     // حالة محلية فقط أثناء محاكاة الحركة.
     // لا نعدل الـ Token الحقيقي هنا.
-    var homeEntryPending = token.homeEntryPending;
+    //
+    // Token واقف فعليًا على خانة 51 في الـ Main Loop
+    // (وليس 51 Home Lane) قد عدّى مدخل الـ Home Lane بالفعل.
+    // لو اللاعب عمل أول Capture بقطعة تانية بعد كده،
+    // القطعة دى لازم تكمل الدورة: 51(Main) -> 0 -> ... -> 50 -> 51(Home)
+    // بدل ما تقفز مباشرة إلى 52 Home Lane.
+    var homeEntryPending =
+        token.homeEntryPending ||
+        path.isParkedOnMainLoopEnd(
+          step: token.positionInPath,
+          position: token.position,
+        );
 
     // هل الـ destination النهائي تم الوصول إليه
     // من خلال Home Lane؟
