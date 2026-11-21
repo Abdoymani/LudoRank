@@ -3,6 +3,12 @@ import 'package:drift/drift.dart';
 import 'tournaments_table.dart';
 
 @DataClassName('MatchData')
+@TableIndex(name: 'idx_matches_tournament', columns: {#tournamentId})
+@TableIndex(
+  name: 'ux_matches_tournament_number',
+  columns: {#tournamentId, #matchNumber},
+  unique: true,
+)
 class Matches extends Table {
   /// Match ID (UUID)
   TextColumn get id => text()();
@@ -10,7 +16,8 @@ class Matches extends Table {
   /// Tournament ID
   TextColumn get tournamentId => text().references(Tournaments, #id)();
 
-  /// Match number داخل البطولة
+  /// رقم المباراة داخل البطولة (1, 2, 3, ...).
+  /// يتم تعيينه تلقائيًا عند الإنشاء.
   IntColumn get matchNumber => integer()();
 
   /// pending
@@ -35,11 +42,4 @@ class Matches extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
-
-  List<Index> get indexes => [
-    Index(
-      'idx_matches_tournament',
-      'CREATE INDEX idx_matches_tournament ON matches (tournament_id)',
-    ),
-  ];
 }

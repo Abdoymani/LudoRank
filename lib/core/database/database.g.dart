@@ -1020,7 +1020,7 @@ class $TournamentPlayersTable extends TournamentPlayers
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => const {};
+  Set<GeneratedColumn> get $primaryKey => {id};
   @override
   TournamentPlayer map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
@@ -1477,7 +1477,8 @@ class MatchData extends DataClass implements Insertable<MatchData> {
   /// Tournament ID
   final String tournamentId;
 
-  /// Match number داخل البطولة
+  /// رقم المباراة داخل البطولة (1, 2, 3, ...).
+  /// يتم تعيينه تلقائيًا عند الإنشاء.
   final int matchNumber;
 
   /// pending
@@ -2258,6 +2259,30 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $TournamentPlayersTable(this);
   late final $MatchesTable matches = $MatchesTable(this);
   late final $MatchPlayersTable matchPlayers = $MatchPlayersTable(this);
+  late final Index idxTournamentPlayersPlayer = Index(
+    'idx_tournament_players_player',
+    'CREATE INDEX idx_tournament_players_player ON tournament_players (player_id)',
+  );
+  late final Index uxTournamentPlayersTournamentPlayer = Index(
+    'ux_tournament_players_tournament_player',
+    'CREATE UNIQUE INDEX ux_tournament_players_tournament_player ON tournament_players (tournament_id, player_id)',
+  );
+  late final Index idxMatchesTournament = Index(
+    'idx_matches_tournament',
+    'CREATE INDEX idx_matches_tournament ON matches (tournament_id)',
+  );
+  late final Index uxMatchesTournamentNumber = Index(
+    'ux_matches_tournament_number',
+    'CREATE UNIQUE INDEX ux_matches_tournament_number ON matches (tournament_id, match_number)',
+  );
+  late final Index idxMatchPlayersMatch = Index(
+    'idx_match_players_match',
+    'CREATE INDEX idx_match_players_match ON match_players (match_id)',
+  );
+  late final Index idxMatchPlayersPlayer = Index(
+    'idx_match_players_player',
+    'CREATE INDEX idx_match_players_player ON match_players (player_id)',
+  );
   late final PlayerDao playerDao = PlayerDao(this as AppDatabase);
   late final TournamentDao tournamentDao = TournamentDao(this as AppDatabase);
   late final TournamentPlayerDao tournamentPlayerDao = TournamentPlayerDao(
@@ -2277,6 +2302,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     tournamentPlayers,
     matches,
     matchPlayers,
+    idxTournamentPlayersPlayer,
+    uxTournamentPlayersTournamentPlayer,
+    idxMatchesTournament,
+    uxMatchesTournamentNumber,
+    idxMatchPlayersMatch,
+    idxMatchPlayersPlayer,
   ];
 }
 

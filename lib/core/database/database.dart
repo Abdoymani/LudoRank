@@ -37,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   /// Constructor used by database migration tests.
   AppDatabase.forTesting(super.executor);
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -66,8 +66,65 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await m.addColumn(matches, matches.gameStateJson);
       }
+
+      // Migration 3 -> 4:
+      // - tournament_players gets a primary key and a unique
+      //   (tournament_id, player_id) index, so the same player cannot
+      //   join the same tournament twice.
+      // - matches get a real match_number (1, 2, 3, ... per tournament).
+      // - The indexes that were declared before but never created.
+      if (from < 4) {
+        await _migrateTo4(m);
+      }
+    },
+
+    beforeOpen: (details) async {
+      // SQLite leaves foreign keys OFF unless each connection enables them.
+      // This runs after migrations, so table rebuilds above are unaffected.
+      await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  Future<void> _migrateTo4(Migrator m) async {
+    // 1. Remove duplicated rows that the old schema allowed.
+    //    Keep the earliest row for each (tournament, player) pair,
+    //    then the earliest row for each id.
+    await customStatement('''
+      DELETE FROM tournament_players
+      WHERE rowid NOT IN (
+        SELECT MIN(rowid) FROM tournament_players
+        GROUP BY tournament_id, player_id
+      )
+    ''');
+    await customStatement('''
+      DELETE FROM tournament_players
+      WHERE rowid NOT IN (
+        SELECT MIN(rowid) FROM tournament_players GROUP BY id
+      )
+    ''');
+
+    // 2. Rebuild the table so it gets PRIMARY KEY (id).
+    await m.alterTable(TableMigration(tournamentPlayers));
+
+    // 3. Number existing matches per tournament by creation order.
+    await customStatement('''
+      UPDATE matches
+      SET match_number = (
+        SELECT COUNT(*) FROM matches AS other
+        WHERE other.tournament_id = matches.tournament_id
+          AND (other.created_at < matches.created_at
+               OR (other.created_at = matches.created_at
+                   AND other.rowid <= matches.rowid))
+      )
+    ''');
+
+    // 4. Create every declared index. Drop first in case an old
+    //    hand-made index with the same name exists.
+    for (final index in allSchemaEntities.whereType<Index>()) {
+      await customStatement('DROP INDEX IF EXISTS "${index.entityName}"');
+      await m.createIndex(index);
+    }
+  }
 }
 
 LazyDatabase _openConnection() {

@@ -30,53 +30,58 @@ void main() {
     }
   });
 
-  test('migrates schema 2 to schema 3 and preserves old data', () async {
-    // Opening the database triggers Drift migration.
-    final matches = await database.select(database.matches).get();
-    final players = await database.select(database.players).get();
-    final tournaments = await database.select(database.tournaments).get();
-    final matchPlayers = await database.select(database.matchPlayers).get();
+  test(
+    'migrates schema 2 to the latest schema and preserves old data',
+    () async {
+      // Opening the database triggers Drift migration.
+      final matches = await database.select(database.matches).get();
+      final players = await database.select(database.players).get();
+      final tournaments = await database.select(database.tournaments).get();
+      final matchPlayers = await database.select(database.matchPlayers).get();
 
-    // Verify existing records were preserved.
-    expect(tournaments, hasLength(1));
-    expect(tournaments.single.id, 'tournament-1');
-    expect(tournaments.single.name, 'Migration Tournament');
+      // Verify existing records were preserved.
+      expect(tournaments, hasLength(1));
+      expect(tournaments.single.id, 'tournament-1');
+      expect(tournaments.single.name, 'Migration Tournament');
 
-    expect(players, hasLength(2));
-    expect(players.map((player) => player.id).toSet(), {
-      'player-1',
-      'player-2',
-    });
+      expect(players, hasLength(2));
+      expect(players.map((player) => player.id).toSet(), {
+        'player-1',
+        'player-2',
+      });
 
-    expect(matches, hasLength(1));
-    expect(matches.single.id, 'match-1');
-    expect(matches.single.tournamentId, 'tournament-1');
-    expect(matches.single.status, 'playing');
+      expect(matches, hasLength(1));
+      expect(matches.single.id, 'match-1');
+      expect(matches.single.tournamentId, 'tournament-1');
+      expect(matches.single.status, 'playing');
 
-    expect(matchPlayers, hasLength(2));
+      expect(matchPlayers, hasLength(2));
 
-    // Verify the value from schema 2 was preserved.
-    expect(matches.single.playersCount, 2);
+      // Verify the value from schema 2 was preserved.
+      expect(matches.single.playersCount, 2);
 
-    // Old matches must not have a snapshot automatically.
-    expect(matches.single.gameStateJson, isNull);
+      // Old matches must not have a snapshot automatically.
+      expect(matches.single.gameStateJson, isNull);
 
-    // Verify SQLite's actual schema version.
-    final versionRow = await database
-        .customSelect('PRAGMA user_version')
-        .getSingle();
+      // Verify SQLite's actual schema version.
+      final versionRow = await database
+          .customSelect('PRAGMA user_version')
+          .getSingle();
 
-    expect(versionRow.read<int>('user_version'), 3);
+      expect(versionRow.read<int>('user_version'), database.schemaVersion);
 
-    // Verify the new column physically exists.
-    final columns = await database
-        .customSelect('PRAGMA table_info(matches)')
-        .get();
+      // Verify the new column physically exists.
+      final columns = await database
+          .customSelect('PRAGMA table_info(matches)')
+          .get();
 
-    final columnNames = columns.map((row) => row.read<String>('name')).toSet();
+      final columnNames = columns
+          .map((row) => row.read<String>('name'))
+          .toSet();
 
-    expect(columnNames, contains('game_state_json'));
-  });
+      expect(columnNames, contains('game_state_json'));
+    },
+  );
 }
 
 /// Creates a real SQLite database using the old schema (version 2).

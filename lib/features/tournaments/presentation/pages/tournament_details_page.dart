@@ -65,7 +65,12 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
     final result = await Navigator.push<List<String>>(
       context,
       MaterialPageRoute(
-        builder: (_) => SelectPlayersPage(tournamentId: widget.tournamentId),
+        builder: (_) => SelectPlayersPage(
+          tournamentId: widget.tournamentId,
+          excludedPlayerIds: tournamentPlayerProvider.players
+              .map((player) => player.playerId)
+              .toSet(),
+        ),
       ),
     );
 

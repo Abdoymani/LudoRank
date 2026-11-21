@@ -57,7 +57,9 @@ class TournamentPlayerProvider extends ChangeNotifier {
 
       await loadPlayers(player.tournamentId);
     } catch (e) {
-      _error = e.toString();
+      _error = _isDuplicateError(e)
+          ? 'اللاعب موجود بالفعل في هذه البطولة'
+          : e.toString();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -68,5 +70,12 @@ class TournamentPlayerProvider extends ChangeNotifier {
     await repository.removePlayer(player.id);
 
     await loadPlayers(player.tournamentId);
+  }
+
+  /// قاعدة البيانات ترفض تكرار (البطولة، اللاعب) بفهرس فريد.
+  static bool _isDuplicateError(Object error) {
+    final message = error.toString();
+    return message.contains('UNIQUE constraint failed') &&
+        message.contains('tournament_players');
   }
 }
