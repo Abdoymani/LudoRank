@@ -8,6 +8,7 @@ import 'package:ludo_rank/features/tournament_players/domain/entities/tournament
 import 'package:ludo_rank/features/tournament_players/presentation/pages/select_players_page.dart';
 import 'package:ludo_rank/features/tournament_players/presentation/providers/tournament_player_provider.dart';
 import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
+import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_standings_provider.dart';
 import 'package:ludo_rank/shared/widgets/app_scaffold.dart';
@@ -32,7 +33,11 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
   final TournamentStandingsProvider standingsProvider =
       sl<TournamentStandingsProvider>();
 
+  final TournamentLifecycleService lifecycle = sl<TournamentLifecycleService>();
+
   final uuid = const Uuid();
+
+  bool _finishing = false;
 
   bool _participantsExpanded = false;
 
@@ -65,7 +70,12 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
     final result = await Navigator.push<List<String>>(
       context,
       MaterialPageRoute(
-        builder: (_) => SelectPlayersPage(tournamentId: widget.tournamentId),
+        builder: (_) => SelectPlayersPage(
+          tournamentId: widget.tournamentId,
+          excludedPlayerIds: tournamentPlayerProvider.players
+              .map((player) => player.playerId)
+              .toSet(),
+        ),
       ),
     );
 
@@ -88,6 +98,82 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
 
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _openMatches() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            TournamentMatchesPage(tournamentId: widget.tournamentId),
+      ),
+    );
+
+    if (!mounted) return;
+
+    // إنشاء أو إلغاء أو إنهاء مباريات قد يغيّر حالة البطولة والترتيب.
+    await tournamentProvider.loadTournament(widget.tournamentId);
+    if (!mounted) return;
+    await _loadStandings();
+  }
+
+  Future<void> _finishTournament() async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    final blocker = await lifecycle.finishBlocker(widget.tournamentId);
+    if (!mounted) return;
+
+    if (blocker != null) {
+      final message = switch (blocker) {
+        TournamentFinishBlocker.notRunning => 'البطولة ليست جارية.',
+        TournamentFinishBlocker.noFinishedMatches =>
+          'لا يمكن إنهاء البطولة قبل انتهاء مباراة واحدة على الأقل.',
+        TournamentFinishBlocker.unfinishedMatches =>
+          'توجد مباريات لم تنته بعد. أنهِها أو ألغِها أولاً.',
+      };
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('إنهاء البطولة؟'),
+        content: const Text(
+          'سيتم اعتماد الترتيب الحالي كنتيجة نهائية، '
+          'ولن يمكن إضافة مباريات أو لاعبين بعد ذلك.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('رجوع'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('إنهاء البطولة'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _finishing = true);
+    try {
+      await lifecycle.finish(widget.tournamentId);
+      await tournamentProvider.loadTournament(widget.tournamentId);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('تم إنهاء البطولة.')));
+    } catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('تعذر إنهاء البطولة: $e')));
+    } finally {
+      if (mounted) setState(() => _finishing = false);
     }
   }
 
@@ -294,11 +380,43 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
   }
 
   Widget _buildActionButtons() {
+    return ListenableBuilder(
+      listenable: tournamentProvider,
+      builder: (context, _) {
+        final status = tournamentProvider.currentTournament?.status;
+        final isOpen =
+            status == null || TournamentStatusTransitions.isOpen(status);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildMainActions(isOpen: isOpen),
+            if (status == TournamentStatus.running) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _finishing ? null : _finishTournament,
+                icon: _finishing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.flag_rounded),
+                label: const Text('إنهاء البطولة'),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildMainActions({required bool isOpen}) {
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
-            onPressed: _addPlayers,
+            onPressed: isOpen ? _addPlayers : null,
             icon: const Icon(Icons.group_add_rounded, size: 19),
             label: const Text(
               'إضافة لاعبين',
@@ -313,18 +431,13 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
         const SizedBox(width: 10),
         Expanded(
           child: FilledButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      TournamentMatchesPage(tournamentId: widget.tournamentId),
-                ),
-              );
-            },
-            icon: const Icon(Icons.play_arrow_rounded, size: 21),
-            label: const Text(
-              'استكمال البطولة',
+            onPressed: _openMatches,
+            icon: Icon(
+              isOpen ? Icons.play_arrow_rounded : Icons.list_alt_rounded,
+              size: 21,
+            ),
+            label: Text(
+              isOpen ? 'استكمال البطولة' : 'عرض المباريات',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

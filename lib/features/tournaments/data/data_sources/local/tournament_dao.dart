@@ -32,8 +32,22 @@ class TournamentDao extends DatabaseAccessor<AppDatabase>
     return update(tournaments).replace(tournament);
   }
 
-  /// حذف بطولة
+  /// حذف بطولة مع كل ما يتبعها (مبارياتها ولاعبيها).
   Future<int> deleteTournament(String id) {
-    return (delete(tournaments)..where((tbl) => tbl.id.equals(id))).go();
+    return transaction(() async {
+      await customStatement(
+        'DELETE FROM match_players WHERE match_id IN '
+        '(SELECT id FROM matches WHERE tournament_id = ?)',
+        [id],
+      );
+      await customStatement('DELETE FROM matches WHERE tournament_id = ?', [
+        id,
+      ]);
+      await customStatement(
+        'DELETE FROM tournament_players WHERE tournament_id = ?',
+        [id],
+      );
+      return (delete(tournaments)..where((tbl) => tbl.id.equals(id))).go();
+    });
   }
 }

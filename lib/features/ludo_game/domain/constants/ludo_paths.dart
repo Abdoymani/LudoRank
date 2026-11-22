@@ -159,6 +159,18 @@ class LudoPath {
     return homePath[step - homeLaneStartStep];
   }
 
+  /// True when a token sits physically on Main Loop Step 51
+  /// (the cell just past this color's Home Lane entrance).
+  ///
+  /// Such a token has already passed the entrance, so even if the
+  /// player unlocks the Home Lane later it must complete one more
+  /// lap before entering: 51(Main) -> 0 -> ... -> 50 -> 51(Home).
+  bool isParkedOnMainLoopEnd({required int step, required Position position}) {
+    return step == lastMainLoopStep &&
+        position == mainLoopPath[lastMainLoopStep] &&
+        position != homePath.first;
+  }
+
   // ============================================================
   // STEP TRANSITION
   // ============================================================

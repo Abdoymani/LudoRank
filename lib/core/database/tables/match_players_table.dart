@@ -2,6 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:ludo_rank/core/database/tables/matches_table.dart';
 import 'package:ludo_rank/core/database/tables/players_table.dart';
 
+@TableIndex(name: 'idx_match_players_match', columns: {#matchId})
+@TableIndex(name: 'idx_match_players_player', columns: {#playerId})
 class MatchPlayers extends Table {
   TextColumn get id => text()();
 
@@ -23,15 +25,4 @@ class MatchPlayers extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
-  // /داخل كلاس MatchPlayers
-  List<Index> get indexes => [
-    Index(
-      'idx_match_players_match',
-      'CREATE INDEX idx_match_players_match ON match_players (match_id)',
-    ),
-    Index(
-      'idx_match_players_player',
-      'CREATE INDEX idx_match_players_player ON match_players (player_id)',
-    ),
-  ];
 }

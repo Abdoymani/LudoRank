@@ -16,8 +16,32 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
     )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
+  /// يضيف المباراة. إذا لم يُحدد رقم للمباراة (أو كان 0)،
+  /// يتم إعطاؤها الرقم التالى داخل البطولة.
   Future<void> insertMatch(MatchesCompanion match) {
-    return into(matches).insert(match);
+    return transaction(() async {
+      var companion = match;
+
+      final number = match.matchNumber;
+      if (!number.present || number.value <= 0) {
+        companion = match.copyWith(
+          matchNumber: Value(await nextMatchNumber(match.tournamentId.value)),
+        );
+      }
+
+      await into(matches).insert(companion);
+    });
+  }
+
+  /// الرقم التالى للمباراة داخل البطولة (يبدأ من 1).
+  Future<int> nextMatchNumber(String tournamentId) async {
+    final maxNumber = matches.matchNumber.max();
+    final query = selectOnly(matches)
+      ..addColumns([maxNumber])
+      ..where(matches.tournamentId.equals(tournamentId));
+
+    final row = await query.getSingle();
+    return (row.read(maxNumber) ?? 0) + 1;
   }
 
   Future<void> insertMatches(List<MatchesCompanion> companions) async {
@@ -38,14 +62,21 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
     return updatedRows > 0;
   }
 
+  /// يحذف المباراة ولاعبيها معًا (المفاتيح الأجنبية مفعلة).
   Future<int> deleteMatch(String id) {
-    return (delete(matches)..where((tbl) => tbl.id.equals(id))).go();
+    return transaction(() async {
+      await customStatement('DELETE FROM match_players WHERE match_id = ?', [
+        id,
+      ]);
+      return (delete(matches)..where((tbl) => tbl.id.equals(id))).go();
+    });
   }
 
   Future<List<db.MatchData>> getTournamentMatches(String tournamentId) {
-    return (select(
-      matches,
-    )..where((tbl) => tbl.tournamentId.equals(tournamentId))).get();
+    return (select(matches)
+          ..where((tbl) => tbl.tournamentId.equals(tournamentId))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.matchNumber)]))
+        .get();
   }
 
   Future<List<db.MatchData>> getAllMatches() {

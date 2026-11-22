@@ -11,7 +11,14 @@ import 'package:ludo_rank/features/players/presentation/providers/player_provide
 class SelectPlayersPage extends StatefulWidget {
   final String tournamentId;
 
-  const SelectPlayersPage({super.key, required this.tournamentId});
+  /// لاعبون موجودون بالفعل في البطولة ولا يمكن اختيارهم مرة أخرى.
+  final Set<String> excludedPlayerIds;
+
+  const SelectPlayersPage({
+    super.key,
+    required this.tournamentId,
+    this.excludedPlayerIds = const {},
+  });
 
   @override
   State<SelectPlayersPage> createState() => _SelectPlayersPageState();
@@ -47,6 +54,18 @@ class _SelectPlayersPageState extends State<SelectPlayersPage> {
       return const AppLoading();
     }
 
+    final availablePlayers = provider.players
+        .where((player) => !widget.excludedPlayerIds.contains(player.id))
+        .toList();
+
+    if (provider.players.isNotEmpty && availablePlayers.isEmpty) {
+      return const AppEmptyState(
+        icon: Icons.how_to_reg_outlined,
+        title: "كل اللاعبين مشتركون بالفعل",
+        subtitle: "أضف لاعبين جددًا أولاً",
+      );
+    }
+
     if (provider.players.isEmpty) {
       return const AppEmptyState(
         icon: Icons.people_outline,
@@ -59,10 +78,10 @@ class _SelectPlayersPageState extends State<SelectPlayersPage> {
       children: [
         Expanded(
           child: ListView.builder(
-            itemCount: provider.players.length,
+            itemCount: availablePlayers.length,
 
             itemBuilder: (_, index) {
-              final Player player = provider.players[index];
+              final Player player = availablePlayers[index];
 
               final selected = selectedPlayers.contains(player.id);
 
