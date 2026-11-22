@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
@@ -312,6 +313,113 @@ void main() {
       );
 
       expect(() => validate(state), throwsStateError);
+    });
+
+    group('token positions', () {
+      LudoToken onBoard(String playerId, int index, int step, Position pos) =>
+          LudoToken(
+            id: '$playerId-token-$index',
+            playerId: playerId,
+            tokenIndex: index,
+            position: pos,
+            positionInPath: step,
+            state: LudoTokenState.normal,
+          );
+
+      List<LudoToken> tokensWith(String playerId, LudoToken first) => [
+        first,
+        for (var i = 1; i < 4; i++)
+          _token(id: '$playerId-token-$i', playerId: playerId, tokenIndex: i),
+      ];
+
+      test('accepts a token whose position matches its step', () {
+        final cell = LudoPaths.green.positionAt(step: 10, useHomeLane: false);
+        final state = _state(
+          players: [
+            _ludoPlayer(
+              playerId: 'player-1',
+              seat: 1,
+              tokens: tokensWith('player-1', onBoard('player-1', 0, 10, cell)),
+            ),
+            _ludoPlayer(playerId: 'player-2', seat: 2),
+          ],
+        );
+
+        expect(() => validate(state), returnsNormally);
+      });
+
+      test('rejects a token whose position does not match its step', () {
+        final wrongCell = LudoPaths.green.positionAt(
+          step: 11,
+          useHomeLane: false,
+        );
+        final state = _state(
+          players: [
+            _ludoPlayer(
+              playerId: 'player-1',
+              seat: 1,
+              tokens: tokensWith(
+                'player-1',
+                onBoard('player-1', 0, 10, wrongCell),
+              ),
+            ),
+            _ludoPlayer(playerId: 'player-2', seat: 2),
+          ],
+        );
+
+        expect(() => validate(state), throwsStateError);
+      });
+
+      test('rejects a token in the home lane before any capture', () {
+        final homeCell = LudoPaths.green.positionAt(
+          step: 53,
+          useHomeLane: true,
+        );
+        final state = _state(
+          players: [
+            _ludoPlayer(
+              playerId: 'player-1',
+              seat: 1,
+              tokens: tokensWith(
+                'player-1',
+                onBoard('player-1', 0, 53, homeCell),
+              ),
+            ),
+            _ludoPlayer(playerId: 'player-2', seat: 2),
+          ],
+        );
+
+        expect(() => validate(state), throwsStateError);
+      });
+
+      test('rejects a player with fewer than four tokens', () {
+        final state = _state(
+          players: [
+            _ludoPlayer(
+              playerId: 'player-1',
+              seat: 1,
+              tokens: [_token(id: 'player-1-token-0', playerId: 'player-1')],
+            ),
+            _ludoPlayer(playerId: 'player-2', seat: 2),
+          ],
+        );
+
+        expect(() => validate(state), throwsStateError);
+      });
+
+      test('rejects two players with the same color', () {
+        final state = _state(
+          players: [
+            _ludoPlayer(playerId: 'player-1', seat: 1),
+            _ludoPlayer(
+              playerId: 'player-2',
+              seat: 2,
+            ).copyWith(color: LudoPlayerColor.green),
+          ],
+        );
+
+        expect(() => validate(state), throwsStateError);
+      });
     });
   });
 }
