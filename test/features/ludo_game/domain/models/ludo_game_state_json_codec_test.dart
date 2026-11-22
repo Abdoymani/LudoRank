@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -54,19 +53,13 @@ void main() {
 
       final restored = LudoGameStateJsonCodec.decode(json);
 
-      expect(
-        restored.turnState.rolls,
-        [
-          const DiceRoll(value: 6, sequence: 1),
-          const DiceRoll(value: 4, sequence: 2),
-          const DiceRoll(value: 6, sequence: 3),
-        ],
-      );
+      expect(restored.turnState.rolls, [
+        const DiceRoll(value: 6, sequence: 1),
+        const DiceRoll(value: 4, sequence: 2),
+        const DiceRoll(value: 6, sequence: 3),
+      ]);
 
-      expect(
-        restored.turnState.availableRolls.values,
-        [4, 6],
-      );
+      expect(restored.turnState.availableRolls.values, [4, 6]);
 
       expect(restored.turnState.sixRollCount, 2);
       expect(restored.turnState.phase, TurnPhase.playing);
@@ -89,41 +82,30 @@ void main() {
 
     test('throws FormatException for invalid JSON', () {
       expect(
-            () => LudoGameStateJsonCodec.decode('{invalid json'),
+        () => LudoGameStateJsonCodec.decode('{invalid json'),
         throwsFormatException,
       );
     });
 
     test('throws FormatException for unsupported format version', () {
-      final json = jsonEncode({
-        'formatVersion': 999,
-        'state': {},
-      });
+      final json = jsonEncode({'formatVersion': 999, 'state': {}});
 
-      expect(
-            () => LudoGameStateJsonCodec.decode(json),
-        throwsFormatException,
-      );
+      expect(() => LudoGameStateJsonCodec.decode(json), throwsFormatException);
     });
 
     test('throws FormatException when required data is missing', () {
       final json = jsonEncode({
         'formatVersion': 1,
-        'state': {
-          'players': [],
-        },
+        'state': {'players': []},
       });
 
-      expect(
-            () => LudoGameStateJsonCodec.decode(json),
-        throwsFormatException,
-      );
+      expect(() => LudoGameStateJsonCodec.decode(json), throwsFormatException);
     });
 
     test('throws FormatException for unknown enum values', () {
-      final map = jsonDecode(
-        LudoGameStateJsonCodec.encode(originalState),
-      ) as Map<String, dynamic>;
+      final map =
+          jsonDecode(LudoGameStateJsonCodec.encode(originalState))
+              as Map<String, dynamic>;
 
       final state = map['state'] as Map<String, dynamic>;
       final players = state['players'] as List<dynamic>;
@@ -132,7 +114,7 @@ void main() {
       player['color'] = 'purple';
 
       expect(
-            () => LudoGameStateJsonCodec.decode(jsonEncode(map)),
+        () => LudoGameStateJsonCodec.decode(jsonEncode(map)),
         throwsFormatException,
       );
     });
