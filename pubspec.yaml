@@ -1,5 +1,5 @@
 name: ludo_rank
-description: "A new Flutter project."
+description: "LudoRank - offline Ludo tournament app."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -38,12 +38,10 @@ dependencies:
   get_it: ^9.0.5
 
   drift: ^2.29.0
-  sqlite3_flutter_libs: ^0.5.39
   path_provider: ^2.1.5
   path: ^1.9.1
 
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
+  shared_preferences: ^2.5.3
 
   logger: ^2.6.1
 
@@ -99,7 +97,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-      - assets/audio/ludorank_token_step.mp3
+      - assets/audio/
       - assets/images/branding/
   #   - images/a_dot_ham.jpeg
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:ludo_rank/shared/widgets/sound_toggle_button.dart';
 
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
@@ -122,7 +123,7 @@ class _MatchGamePageState extends State<MatchGamePage> {
                     icon: const Icon(Icons.sync),
                   )
                 else
-                  const SizedBox(width: 48),
+                  const SoundToggleButton(),
               ],
               bottom: const PreferredSize(
                 preferredSize: Size.fromHeight(1),
@@ -285,6 +286,7 @@ class _LiveMatchLayout extends StatelessWidget {
                               selectableRolls: provider.selectableRolls,
                               onAvailableRollTap:
                                   provider.handleAvailableRollTap,
+                              sounds: provider.sounds,
                             ),
                           );
                         },

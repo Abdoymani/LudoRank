@@ -13,7 +13,8 @@ import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
 import 'package:ludo_rank/features/ludo_game/domain/services/ludo_move_tracer.dart';
 
 import 'dart:async';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:ludo_rank/core/audio/game_sound.dart';
+import 'package:ludo_rank/core/audio/sound_controller.dart';
 
 import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
 
@@ -40,6 +41,9 @@ class LudoMatchBoard extends StatefulWidget {
   final AvailableRolls selectableRolls;
   final ValueChanged<int> onAvailableRollTap;
 
+  /// Plays the per-square step sound during the move animation.
+  final GameSoundPlayer? sounds;
+
   /// Called when a specific legal move is selected.
   //final ValueChanged<MoveOption> onMoveTap;
 
@@ -57,6 +61,7 @@ class LudoMatchBoard extends StatefulWidget {
     this.pendingAutoMove,
     required this.selectableRolls,
     required this.onAvailableRollTap,
+    this.sounds,
   });
 
   @override
@@ -72,7 +77,6 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   String? _animatingTokenId;
   bool _startingAutoMove = false;
   bool _completingMove = false;
-  late final AudioPlayer _stepPlayer;
   int _lastSoundStep = 0;
 
   @override
@@ -83,9 +87,6 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       vsync: this,
       duration: const Duration(milliseconds: 650),
     )..addStatusListener(_onAnimationStatus);
-
-    _stepPlayer = AudioPlayer();
-    _stepPlayer.setReleaseMode(ReleaseMode.stop);
 
     _controller.addListener(_onAnimationTick);
 
@@ -168,7 +169,6 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   @override
   void dispose() {
     _controller.dispose();
-    unawaited(_stepPlayer.dispose());
     super.dispose();
   }
 
@@ -346,16 +346,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
     _lastSoundStep = currentStep;
 
-    unawaited(_playStepSound());
-  }
-
-  Future<void> _playStepSound() async {
-    try {
-      await _stepPlayer.stop();
-      await _stepPlayer.play(AssetSource('audio/ludorank_token_step.mp3'));
-    } catch (error) {
-      debugPrint('Token movement sound failed: $error');
-    }
+    widget.sounds?.play(GameSound.step);
   }
 
   LudoPath _pathFor(LudoPlayerColor color) {

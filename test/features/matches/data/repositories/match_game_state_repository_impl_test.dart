@@ -14,20 +14,20 @@ void main() {
   setUp(() async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
 
-    repository = MatchGameStateRepositoryImpl(
-      database.matchDao,
-    );
+    repository = MatchGameStateRepositoryImpl(database.matchDao);
 
-    await database.into(database.tournaments).insert(
-      TournamentsCompanion.insert(
-        id: 'tournament-1',
-        name: 'Test Tournament',
-        rounds: 1,
-        status: 'active',
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-      ),
-    );
+    await database
+        .into(database.tournaments)
+        .insert(
+          TournamentsCompanion.insert(
+            id: 'tournament-1',
+            name: 'Test Tournament',
+            rounds: 1,
+            status: 'active',
+            createdAt: DateTime(2026, 1, 1),
+            updatedAt: DateTime(2026, 1, 1),
+          ),
+        );
 
     await database.matchDao.insertMatch(
       MatchesCompanion.insert(
@@ -48,14 +48,9 @@ void main() {
     test('saves and restores the same game state', () async {
       final originalState = _createGameState();
 
-      await repository.saveGameState(
-        matchId: 'match-1',
-        state: originalState,
-      );
+      await repository.saveGameState(matchId: 'match-1', state: originalState);
 
-      final restoredState = await repository.loadGameState(
-        'match-1',
-      );
+      final restoredState = await repository.loadGameState('match-1');
 
       expect(restoredState, isNotNull);
       expect(restoredState, originalState);
@@ -69,7 +64,7 @@ void main() {
 
     test('throws StateError when saving for missing match', () async {
       expect(
-            () => repository.saveGameState(
+        () => repository.saveGameState(
           matchId: 'missing-match',
           state: _createGameState(),
         ),
@@ -85,13 +80,9 @@ void main() {
 
       await repository.clearGameState('match-1');
 
-      final restoredState = await repository.loadGameState(
-        'match-1',
-      );
+      final restoredState = await repository.loadGameState('match-1');
 
-      final match = await database.matchDao.getMatchById(
-        'match-1',
-      );
+      final match = await database.matchDao.getMatchById('match-1');
 
       expect(restoredState, isNull);
       expect(match, isNotNull);
@@ -100,7 +91,7 @@ void main() {
 
     test('throws StateError when clearing missing match', () async {
       expect(
-            () => repository.clearGameState('missing-match'),
+        () => repository.clearGameState('missing-match'),
         throwsStateError,
       );
     });
@@ -111,10 +102,7 @@ void main() {
         gameStateJson: '{invalid-json',
       );
 
-      expect(
-            () => repository.loadGameState('match-1'),
-        throwsFormatException,
-      );
+      expect(() => repository.loadGameState('match-1'), throwsFormatException);
     });
   });
 }

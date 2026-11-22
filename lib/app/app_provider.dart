@@ -11,13 +11,16 @@ import 'package:ludo_rank/features/tournament_players/presentation/providers/tou
 
 import 'package:ludo_rank/app/theme_controller.dart';
 
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:ludo_rank/core/audio/sound_controller.dart';
+import 'package:ludo_rank/core/settings/app_settings.dart';
 
 class AppProviders {
   static final providers = [
     ChangeNotifierProvider<ThemeController>(
-      create: (_) => ThemeController(settingsBox: Hive.box('app_settings')),
+      create: (_) => ThemeController(settings: sl<AppSettings>()),
     ),
+    // Singleton owned by get_it, so `.value` (the provider must not dispose it).
+    ChangeNotifierProvider<SoundController>.value(value: sl<SoundController>()),
     ChangeNotifierProvider<HomeProvider>(create: (_) => sl<HomeProvider>()),
     ChangeNotifierProvider<PlayerProvider>(create: (_) => sl<PlayerProvider>()),
     ChangeNotifierProvider<TournamentProvider>(

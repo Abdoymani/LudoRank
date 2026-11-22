@@ -12,16 +12,18 @@ void main() {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     dao = database.matchDao;
 
-    await database.into(database.tournaments).insert(
-      TournamentsCompanion.insert(
-        id: 'tournament-1',
-        name: 'Test Tournament',
-        rounds: 1,
-        status: 'active',
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-      ),
-    );
+    await database
+        .into(database.tournaments)
+        .insert(
+          TournamentsCompanion.insert(
+            id: 'tournament-1',
+            name: 'Test Tournament',
+            rounds: 1,
+            status: 'active',
+            createdAt: DateTime(2026, 1, 1),
+            updatedAt: DateTime(2026, 1, 1),
+          ),
+        );
 
     await dao.insertMatch(
       MatchesCompanion.insert(
@@ -102,47 +104,33 @@ void main() {
     });
 
     test('returns zero when clearing a missing match', () async {
-      final updatedRows = await dao.clearGameStateJson(
-        'missing-match',
-      );
+      final updatedRows = await dao.clearGameStateJson('missing-match');
 
       expect(updatedRows, 0);
     });
 
-    test(
-      'preserves game state JSON when updating match status',
-          () async {
-        const snapshot = '{"formatVersion":1,"state":{"turn":2}}';
+    test('preserves game state JSON when updating match status', () async {
+      const snapshot = '{"formatVersion":1,"state":{"turn":2}}';
 
-        // نحفظ Snapshot للمباراة.
-        await dao.saveGameStateJson(
-          matchId: 'match-1',
-          gameStateJson: snapshot,
-        );
+      // نحفظ Snapshot للمباراة.
+      await dao.saveGameStateJson(matchId: 'match-1', gameStateJson: snapshot);
 
-        // نغيّر الحالة إلى pending لمحاكاة بداية المباراة.
-        await dao.updateMatch(
-          const MatchesCompanion(
-            id: Value('match-1'),
-            status: Value('pending'),
-          ),
-        );
+      // نغيّر الحالة إلى pending لمحاكاة بداية المباراة.
+      await dao.updateMatch(
+        const MatchesCompanion(id: Value('match-1'), status: Value('pending')),
+      );
 
-        // نحدّث الحالة من pending إلى playing.
-        final updated = await dao.updateMatch(
-          const MatchesCompanion(
-            id: Value('match-1'),
-            status: Value('playing'),
-          ),
-        );
+      // نحدّث الحالة من pending إلى playing.
+      final updated = await dao.updateMatch(
+        const MatchesCompanion(id: Value('match-1'), status: Value('playing')),
+      );
 
-        final match = await dao.getMatchById('match-1');
+      final match = await dao.getMatchById('match-1');
 
-        expect(updated, isTrue);
-        expect(match, isNotNull);
-        expect(match!.status, 'playing');
-        expect(match.gameStateJson, snapshot);
-      },
-    );
+      expect(updated, isTrue);
+      expect(match, isNotNull);
+      expect(match!.status, 'playing');
+      expect(match.gameStateJson, snapshot);
+    });
   });
 }
