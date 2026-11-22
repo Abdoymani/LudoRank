@@ -1,3 +1,6 @@
+import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
+import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
+import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/turn_state.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
@@ -17,6 +20,8 @@ import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_engine.da
 /// It does not modify or repair the supplied state.
 class MatchGameStateValidator {
   const MatchGameStateValidator();
+
+  static const int tokensPerPlayer = 4;
 
   void validate({
     required Match match,
@@ -134,9 +139,81 @@ class MatchGameStateValidator {
       _fail('قائمة لاعبي Snapshot لا تطابق لاعبي المباراة.');
     }
 
+    _validatePlayersAndTokens(state);
     _validateFinishedPlayers(state);
     _validateCurrentPlayer(state);
     _validateTurnState(state);
+  }
+
+  /// كل لاعب: لون مختلف، و4 قطع بأرقام 0..3، وكل قطعة على البورد
+  /// مكانها الحقيقي مطابق لرقم خطوتها على مسار لونها.
+  void _validatePlayersAndTokens(LudoGameState state) {
+    final colors = <LudoPlayerColor>{};
+
+    for (final player in state.players) {
+      if (!colors.add(player.color)) {
+        _fail('يوجد أكثر من لاعب بنفس اللون.');
+      }
+
+      if (player.tokens.length != tokensPerPlayer) {
+        _fail('اللاعب ${player.playerId} لازم يكون معاه $tokensPerPlayer قطع.');
+      }
+
+      final indexes = player.tokens.map((token) => token.tokenIndex).toSet();
+
+      if (indexes.length != tokensPerPlayer ||
+          indexes.any((index) => index < 0 || index >= tokensPerPlayer)) {
+        _fail('أرقام قطع اللاعب ${player.playerId} غير صحيحة.');
+      }
+
+      final path = LudoPaths.forColor(player.color);
+
+      for (final token in player.tokens) {
+        _validateTokenPosition(player: player, token: token, path: path);
+      }
+    }
+  }
+
+  void _validateTokenPosition({
+    required LudoPlayer player,
+    required LudoToken token,
+    required LudoPath path,
+  }) {
+    final step = token.positionInPath;
+
+    if (token.isInitial) {
+      if (step != -1) {
+        _fail('القطعة ${token.id} في البيت لكن خطوتها $step.');
+      }
+      return;
+    }
+
+    if (token.isFinished) {
+      if (step != LudoPath.finishStep) {
+        _fail('القطعة ${token.id} منتهية لكن خطوتها $step.');
+      }
+      return;
+    }
+
+    if (step < 0 || step >= LudoPath.finishStep) {
+      _fail('خطوة القطعة ${token.id} خارج المسار: $step.');
+    }
+
+    final onMainLoop =
+        step <= LudoPath.lastMainLoopStep &&
+        token.position == path.positionAt(step: step, useHomeLane: false);
+
+    final onHomeLane =
+        step >= LudoPath.homeLaneStartStep &&
+        token.position == path.positionAt(step: step, useHomeLane: true);
+
+    if (!onMainLoop && !onHomeLane) {
+      _fail('مكان القطعة ${token.id} لا يطابق خطوتها $step.');
+    }
+
+    if (onHomeLane && !onMainLoop && !player.hasCaptured) {
+      _fail('القطعة ${token.id} في ممر البيت قبل أول أكلة.');
+    }
   }
 
   void _validateFinishedPlayers(LudoGameState state) {

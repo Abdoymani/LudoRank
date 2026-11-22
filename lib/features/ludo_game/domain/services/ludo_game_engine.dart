@@ -11,6 +11,7 @@ import '../models/game_result.dart';
 import '../models/ludo_game_state.dart';
 import '../models/move_option.dart';
 import '../models/turn_state.dart';
+import 'ludo_move_tracer.dart';
 
 /// نتيجة حساب Destination داخل المسار.
 ///
@@ -636,104 +637,21 @@ class LudoGameEngine {
     required LudoToken token,
     required int steps,
   }) {
-    if (steps <= 0) {
+    // المنطق كله في LudoMoveTracer عشان الأنيميشن يستخدم نفس الحساب.
+    final trace = LudoMoveTracer.trace(
+      path: path,
+      hasCaptured: player.hasCaptured,
+      token: token,
+      steps: steps,
+    );
+
+    if (trace == null || trace.isEmpty) {
       return null;
     }
 
-    if (token.positionInPath < 0 ||
-        token.positionInPath > LudoPath.finishStep) {
-      return null;
-    }
+    final last = trace.last;
 
-    var step = token.positionInPath;
-
-    // حالة محلية فقط أثناء محاكاة الحركة.
-    // لا نعدل الـ Token الحقيقي هنا.
-    //
-    // Token واقف فعليًا على خانة 51 في الـ Main Loop
-    // (وليس 51 Home Lane) قد عدّى مدخل الـ Home Lane بالفعل.
-    // لو اللاعب عمل أول Capture بقطعة تانية بعد كده،
-    // القطعة دى لازم تكمل الدورة: 51(Main) -> 0 -> ... -> 50 -> 51(Home)
-    // بدل ما تقفز مباشرة إلى 52 Home Lane.
-    var homeEntryPending =
-        token.homeEntryPending ||
-        path.isParkedOnMainLoopEnd(
-          step: token.positionInPath,
-          position: token.position,
-        );
-
-    // هل الـ destination النهائي تم الوصول إليه
-    // من خلال Home Lane؟
-    var destinationUseHomeLane = false;
-
-    for (var i = 0; i < steps; i++) {
-      // Finish نقطة نهائية ولا يمكن تجاوزها.
-      if (step == LudoPath.finishStep) {
-        return null;
-      }
-
-      // ========================================================
-      // RESOLVE CURRENT ROUTE
-      // ========================================================
-      //
-      // قبل Capture:
-      //   51 = Main Loop
-      //
-      // بعد Capture:
-      //   51 = Home Lane
-      //
-      // الاستثناء:
-      // Token نفسه عند 51 Main Loop ومعه
-      // homeEntryPending=true
-      //
-      // في هذه الحالة:
-      //   51(Main) -> 0
-      //
-      final useHomeLane =
-          player.hasCaptured &&
-          !(homeEntryPending && step == LudoPath.lastMainLoopStep);
-
-      final nextStep = path.nextStep(
-        currentStep: step,
-        useHomeLane: useHomeLane,
-      );
-
-      // ========================================================
-      // RESOLVE DESTINATION SEMANTICS
-      // ========================================================
-      //
-      // الرقم 51 وحده لا يكفي.
-      //
-      // 50 -> 51 عندما useHomeLane=true
-      //      => 51 Home Lane
-      //
-      // 50 -> 51 عندما useHomeLane=false
-      //      => 51 Main Loop
-      //
-      // 51 -> 0 عندما useHomeLane=false
-      //      => 0 Main Loop
-      //
-      // 51 -> 52 عندما useHomeLane=true
-      //      => 52 Home Lane
-      //
-      destinationUseHomeLane =
-          useHomeLane && nextStep >= LudoPath.homeLaneStartStep;
-
-      // ========================================================
-      // COMPLETE SPECIAL PENDING STATE
-      // ========================================================
-      //
-      // بمجرد الوصول إلى 51 Home Lane،
-      // يكون الـ Token قد أكمل الدورة المطلوبة.
-      //
-      if (destinationUseHomeLane && nextStep == LudoPath.homeLaneStartStep) {
-        homeEntryPending = false;
-      }
-
-      step = nextStep;
-    }
-
-    return _PathDestination(step: step, useHomeLane: destinationUseHomeLane);
+    return _PathDestination(step: last.step, useHomeLane: last.useHomeLane);
   }
 
   // ============================================================
