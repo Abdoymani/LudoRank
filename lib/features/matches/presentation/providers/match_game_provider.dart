@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -48,7 +49,69 @@ class MatchGameProvider extends ChangeNotifier {
   bool _isSavingSnapshot = false;
   bool _snapshotSaveFailed = false;
 
-  MatchGameProvider({required this.service, this.sounds});
+  /// Pause between showing a roll and auto-moving the only legal token,
+  /// so players can see the die before the piece starts walking.
+  final Duration autoMoveDelay;
+
+  bool _disposed = false;
+
+  // Cache of engine.getValidMoves() for the current engine state. The engine
+  // replaces its state object on every change, so identity is a safe key.
+  LudoGameState? _movesCacheState;
+  List<MoveOption> _movesCache = const <MoveOption>[];
+
+  MatchGameProvider({
+    required this.service,
+    this.sounds,
+    this.autoMoveDelay = Duration.zero,
+  });
+
+  bool get isDisposed => _disposed;
+
+  // Shows a roll whose turn passed without a move (no legal move or a
+  // third six), which the engine otherwise skips in the same frame.
+  RollNotice? _rollNotice;
+  Timer? _rollNoticeTimer;
+  final List<Timer> _soundTimers = <Timer>[];
+
+  // The save started by the last roll or move; leaving the page waits for it.
+  Future<void>? _pendingSave;
+
+  RollNotice? get rollNotice => _rollNotice;
+
+  /// Display time for [rollNotice].
+  static const Duration rollNoticeDuration = Duration(milliseconds: 1400);
+
+  /// Waits for an in-flight snapshot save (used before leaving the match).
+  Future<void> waitForPendingSave() async {
+    final save = _pendingSave;
+    if (save == null) return;
+    try {
+      await save;
+    } catch (_) {
+      // The save error is already shown through [error].
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    // Async saves can finish after the page closed; never touch a disposed
+    // notifier.
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _rollNoticeTimer?.cancel();
+    for (final timer in _soundTimers) {
+      timer.cancel();
+    }
+    _soundTimers.clear();
+    super.dispose();
+  }
+
   // ============================================================
   // CONSTRUCTOR AND DESTRUCTOR isAutoMove
   // ======================================
@@ -101,7 +164,17 @@ class MatchGameProvider extends ChangeNotifier {
   }
 
   List<MoveOption> get availableMoves {
-    return _session?.engine.getValidMoves() ?? const <MoveOption>[];
+    final session = _session;
+    if (session == null) return const <MoveOption>[];
+
+    final engineState = session.engine.state;
+    if (!identical(engineState, _movesCacheState)) {
+      _movesCacheState = engineState;
+      _movesCache = List<MoveOption>.unmodifiable(
+        session.engine.getValidMoves(),
+      );
+    }
+    return _movesCache;
   }
 
   // ===========================
@@ -359,6 +432,13 @@ class MatchGameProvider extends ChangeNotifier {
 
       _session = restoredSession;
       _matchStatus = restoredSession.match.status;
+
+      // The match may have been left right after a roll with only one legal
+      // move; restore the automatic move so the board doesn't look frozen.
+      final moves = availableMoves;
+      if (turnState?.isPlaying == true && moves.length == 1) {
+        _pendingAutoMove = moves.single;
+      }
     } catch (e) {
       _session = null;
       _matchStatus = null;
@@ -409,18 +489,26 @@ class MatchGameProvider extends ChangeNotifier {
       _pendingAutoMove = null;
       _isAutoMoveExecuting = false;
 
+      _rollNotice = null;
+      _rollNoticeTimer?.cancel();
+
       // المحرك وحده مسؤول عن قواعد رمي النرد.
       final stateBeforeRoll = currentSession.engine.state;
       currentSession.engine.rollDice();
       _playSounds(
         GameSoundEvents.forRoll(stateBeforeRoll, currentSession.engine.state),
       );
+      _showRollNoticeIfTurnPassed(stateBeforeRoll, currentSession);
 
-      // الحفاظ على منطق اكتشاف الحركة الوحيدة كما هو.
+      // الحركة الوحيدة تتنفذ تلقائيًا، لكن بعد ما اللاعب يشوف النرد.
       final legalMoves = availableMoves;
+      final stateAfterRoll = currentSession.engine.state;
+      final autoMove = turnState?.isPlaying == true && legalMoves.length == 1
+          ? legalMoves.single
+          : null;
 
-      if (turnState?.isPlaying == true && legalMoves.length == 1) {
-        _pendingAutoMove = legalMoves.single;
+      if (autoMove != null && autoMoveDelay == Duration.zero) {
+        _pendingAutoMove = autoMove;
       }
 
       // قفل اللعب قبل بدء الحفظ.
@@ -430,12 +518,24 @@ class MatchGameProvider extends ChangeNotifier {
       notifyListeners();
 
       try {
-        await service.saveSnapshot(session: currentSession);
+        await _trackSave(service.saveSnapshot(session: currentSession));
 
         _isSavingSnapshot = false;
         _snapshotSaveFailed = false;
 
         notifyListeners();
+
+        if (autoMove != null && autoMoveDelay > Duration.zero) {
+          await Future<void>.delayed(autoMoveDelay);
+          // Skip if the page closed or the player already moved by hand.
+          if (!_disposed &&
+              identical(_session, currentSession) &&
+              identical(currentSession.engine.state, stateAfterRoll) &&
+              _pendingAutoMove == null) {
+            _pendingAutoMove = autoMove;
+            notifyListeners();
+          }
+        }
       } catch (e) {
         _isSavingSnapshot = false;
         _snapshotSaveFailed = true;
@@ -697,7 +797,7 @@ class MatchGameProvider extends ChangeNotifier {
 
       // 5. حفظ الحالة الجديدة بعد الحركة.
       try {
-        await service.saveSnapshot(session: currentSession);
+        await _trackSave(service.saveSnapshot(session: currentSession));
 
         _isSavingSnapshot = false;
         _snapshotSaveFailed = false;
@@ -898,11 +998,64 @@ class MatchGameProvider extends ChangeNotifier {
       if (i == 0) {
         player.play(sound);
       } else {
-        Future<void>.delayed(
-          Duration(milliseconds: 420 * i),
-          () => player.play(sound),
-        );
+        late final Timer timer;
+        timer = Timer(Duration(milliseconds: 420 * i), () {
+          _soundTimers.remove(timer);
+          if (!_disposed) player.play(sound);
+        });
+        _soundTimers.add(timer);
       }
     }
   }
+
+  Future<void> _trackSave(Future<void> save) {
+    _pendingSave = save;
+    return save;
+  }
+
+  void _showRollNoticeIfTurnPassed(
+    LudoGameState before,
+    MatchGameSession session,
+  ) {
+    final after = session.engine.state;
+    final value = session.engine.lastRolledValue;
+    if (value == null ||
+        after.isFinished ||
+        after.currentPlayerIndex == before.currentPlayerIndex) {
+      return;
+    }
+
+    final roller = before.players[before.currentPlayerIndex];
+    _rollNotice = RollNotice(
+      playerId: roller.playerId,
+      playerName: roller.name,
+      value: value,
+      turnCancelled: before.turnState.sixRollCount >= 2,
+    );
+
+    _rollNoticeTimer?.cancel();
+    _rollNoticeTimer = Timer(rollNoticeDuration, () {
+      if (_disposed) return;
+      _rollNotice = null;
+      notifyListeners();
+    });
+  }
+}
+
+/// A roll that ended the turn without a move, shown briefly to the players.
+@immutable
+class RollNotice {
+  final String playerId;
+  final String playerName;
+  final int value;
+
+  /// True when this was the third six (the whole turn is cancelled).
+  final bool turnCancelled;
+
+  const RollNotice({
+    required this.playerId,
+    required this.playerName,
+    required this.value,
+    required this.turnCancelled,
+  });
 }

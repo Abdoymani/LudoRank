@@ -1,3 +1,5 @@
+import 'package:ludo_rank/core/transactions/transaction_runner.dart';
+
 import '../entities/match.dart';
 import '../entities/match_status.dart';
 import '../repositories/match_game_state_repository.dart';
@@ -12,9 +14,13 @@ class CancelMatch {
   final MatchRepository matchRepository;
   final MatchGameStateRepository gameStateRepository;
 
+  /// Status change and snapshot removal are saved together or not at all.
+  final TransactionRunner transactionRunner;
+
   const CancelMatch({
     required this.matchRepository,
     required this.gameStateRepository,
+    this.transactionRunner = const NoTransactionRunner(),
   });
 
   static bool canCancel(MatchStatus status) {
@@ -41,8 +47,10 @@ class CancelMatch {
       updatedAt: DateTime.now(),
     );
 
-    await matchRepository.update(cancelled);
-    await gameStateRepository.clearGameState(matchId);
+    await transactionRunner.run(() async {
+      await matchRepository.update(cancelled);
+      await gameStateRepository.clearGameState(matchId);
+    });
 
     return cancelled;
   }

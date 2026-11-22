@@ -152,13 +152,20 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
         return;
       }
 
-      await Navigator.of(context).pushReplacement<bool, bool>(
+      // Wait for the game page to close before returning to the match list,
+      // so the list reloads with the match's real status. (pushReplacement
+      // returned to the list immediately, while the match was still pending,
+      // and a paused match then showed "start" instead of "resume".)
+      await Navigator.of(context).push<bool>(
         MaterialPageRoute<bool>(
           builder: (_) =>
               MatchGamePage(matchId: match.id, playerNames: playerNames),
         ),
-        result: true,
       );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+      return;
     } catch (e) {
       if (!mounted) return;
 

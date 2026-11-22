@@ -80,6 +80,12 @@ class LudoGameEngine {
   /// Current complete game state.
   LudoGameState get state => _state;
 
+  int? _lastRolledValue;
+
+  /// Value of the most recent die roll. Display only: lets the UI show a
+  /// roll whose turn already passed (no legal move, or a third six).
+  int? get lastRolledValue => _lastRolledValue;
+
   /// Current player according to seat order.
   LudoPlayer get currentPlayer => _state.currentPlayer;
 
@@ -230,6 +236,7 @@ class LudoGameEngine {
     }
 
     final roll = DiceRoll(value: value, sequence: sequence);
+    _lastRolledValue = value;
 
     final updatedRolls = [...turn.rolls, roll];
 

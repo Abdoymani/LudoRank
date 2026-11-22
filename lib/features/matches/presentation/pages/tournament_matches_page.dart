@@ -13,6 +13,7 @@ import 'package:ludo_rank/shared/widgets/app_scaffold.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/pages/match_game_page.dart';
 
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
+import 'package:ludo_rank/features/matches/domain/repositories/match_repository.dart';
 import 'package:ludo_rank/features/match_players/domain/repositories/match_player_repository.dart';
 
 import 'package:ludo_rank/features/players/domain/entities/player.dart';
@@ -51,7 +52,9 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
   }
 
   Future<void> _createNewMatch() async {
-    final result = await Navigator.push<bool>(
+    // CreateMatchPage returns only after the new match's game page closed,
+    // so this reload sees the match's real status (playing/finished).
+    await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => CreateMatchPage(tournamentId: widget.tournamentId),
@@ -62,9 +65,7 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
       return;
     }
 
-    if (result == true) {
-      await _loadMatches();
-    }
+    await _loadMatches();
   }
 
   Future<void> _refreshMatches() async {
@@ -202,7 +203,18 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
     }
   }
 
-  Future<void> _openMatch(Match match, {bool resumeExisting = false}) async {
+  Future<void> _openMatch(Match listed, {bool resumeExisting = false}) async {
+    // The list can be older than the database (e.g. the match was started
+    // and paused since it loaded). Use the stored status to decide whether
+    // this is a new start or a resume.
+    Match match = listed;
+    try {
+      match = await sl<MatchRepository>().getById(listed.id) ?? listed;
+    } catch (_) {}
+    if (!mounted) return;
+    if (match.status == MatchStatus.playing) resumeExisting = true;
+    if (match.status == MatchStatus.pending) resumeExisting = false;
+
     final expectedStatus = resumeExisting
         ? MatchStatus.playing
         : MatchStatus.pending;
@@ -255,7 +267,7 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
         for (final entry in playerEntries) entry.key: entry.value,
       };
 
-      final result = await Navigator.push<bool>(
+      await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => MatchGamePage(
@@ -269,9 +281,9 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
         return;
       }
 
-      if (result == true) {
-        await _loadMatches();
-      }
+      // Always refresh: a match left with "pause" is now Playing (resumable)
+      // even though the game page did not finish it.
+      await _loadMatches();
     } catch (e) {
       if (!mounted) {
         return;

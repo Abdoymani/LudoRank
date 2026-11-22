@@ -70,12 +70,28 @@ class LudoMatchBoardArt extends StatelessWidget {
                 padding: EdgeInsets.all(frame),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(frame * .20),
-                  child: CustomPaint(
-                    size: Size.square(innerSide),
-                    painter: _MatchBoardPainter(
-                      players: players,
-                      hiddenTokenId: hiddenTokenId,
-                    ),
+                  // The board itself never changes during a match: it is painted
+                  // once into its own layer. Only the light token layer
+                  // repaints when pieces move.
+                  child: Stack(
+                    children: <Widget>[
+                      RepaintBoundary(
+                        child: CustomPaint(
+                          size: Size.square(innerSide),
+                          isComplex: true,
+                          painter: const _MatchBoardPainter.background(),
+                        ),
+                      ),
+                      RepaintBoundary(
+                        child: CustomPaint(
+                          size: Size.square(innerSide),
+                          painter: _MatchBoardPainter.tokens(
+                            players: players,
+                            hiddenTokenId: hiddenTokenId,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -89,16 +105,31 @@ class LudoMatchBoardArt extends StatelessWidget {
 
 class _MatchBoardPainter extends CustomPainter {
   final List<LudoPlayer> players;
-  final LudoBoardGeometry geometry = LudoBoardGeometry.instance;
   final String? hiddenTokenId;
 
-  _MatchBoardPainter({required this.players, this.hiddenTokenId});
+  /// True: static board art. False: tokens, lane locks and the outer edge.
+  final bool paintsBackground;
+
+  LudoBoardGeometry get geometry => LudoBoardGeometry.instance;
+
+  const _MatchBoardPainter.background()
+    : players = const <LudoPlayer>[],
+      hiddenTokenId = null,
+      paintsBackground = true;
+
+  const _MatchBoardPainter.tokens({required this.players, this.hiddenTokenId})
+    : paintsBackground = false;
 
   @override
   void paint(Canvas canvas, Size size) {
     final side = math.min(size.width, size.height);
     final cell = side / LudoBoardGeometry.gridSize;
     final boardRect = Rect.fromLTWH(0, 0, side, side);
+
+    if (!paintsBackground) {
+      _paintForeground(canvas, side, cell, boardRect);
+      return;
+    }
 
     canvas.drawRect(boardRect, Paint()..color = const Color(0xFFFFFCF5));
 
@@ -151,7 +182,14 @@ class _MatchBoardPainter extends CustomPainter {
 
     // Strong square borders make all four homes unmistakable.
     _paintHomeFrames(canvas, side, cell);
+  }
 
+  void _paintForeground(
+    Canvas canvas,
+    double side,
+    double cell,
+    Rect boardRect,
+  ) {
     // Tokens are rendered on top of every cell so they remain crisp and tactile.
     _paintTokens(canvas, side, cell);
 
@@ -670,7 +708,9 @@ class _MatchBoardPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MatchBoardPainter oldDelegate) {
-    return oldDelegate.players != players ||
+    if (paintsBackground && oldDelegate.paintsBackground) return false;
+    return oldDelegate.paintsBackground != paintsBackground ||
+        oldDelegate.players != players ||
         oldDelegate.hiddenTokenId != hiddenTokenId;
   }
 }

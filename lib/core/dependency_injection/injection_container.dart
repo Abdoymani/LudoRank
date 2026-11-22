@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ludo_rank/core/transactions/transaction_runner.dart';
 import 'package:get_it/get_it.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
@@ -60,7 +62,10 @@ Future<void> initDependencies() async {
   // Settings (theme, sound) and app-wide sound effects.
   final settings = await AppSettings.load();
   sl.registerSingleton<AppSettings>(settings);
-  sl.registerSingleton<SoundController>(SoundController(settings));
+  final soundController = SoundController(settings);
+  sl.registerSingleton<SoundController>(soundController);
+  // Warm the sound pool in the background so game sounds start on time.
+  unawaited(soundController.preload());
 
   // Database
 
@@ -112,6 +117,7 @@ Future<void> initDependencies() async {
     () => CancelMatch(
       matchRepository: sl<MatchRepository>(),
       gameStateRepository: sl<MatchGameStateRepository>(),
+      transactionRunner: DriftTransactionRunner(sl<AppDatabase>()),
     ),
   );
 
@@ -179,6 +185,7 @@ Future<void> initDependencies() async {
     () => MatchGameProvider(
       service: sl<MatchGameService>(),
       sounds: sl<SoundController>(),
+      autoMoveDelay: const Duration(milliseconds: 450),
     ),
   );
 
