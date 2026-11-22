@@ -13,6 +13,9 @@ import 'package:ludo_rank/features/matches/presentation/providers/match_game_pro
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'dart:async';
 
+import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
+import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
+
 class MatchGamePage extends StatefulWidget {
   /// Database match ID.
   final String matchId;
@@ -65,33 +68,96 @@ class _MatchGamePageState extends State<MatchGamePage> {
     await provider.executeMove(move);
   }
 
+  bool _leaving = false;
+
+  bool get _canPopFreely => provider.isGameFinished && provider.isFinished;
+
+  /// Back arrow and Android back both land here: the player chooses to keep
+  /// playing, pause (the match is saved after every roll and move and can be
+  /// resumed from the tournament's match list), or cancel the match.
   Future<void> _handleBack() async {
-    if (provider.isGameFinished && provider.isFinished) {
+    if (_leaving) return;
+
+    if (_canPopFreely) {
       if (mounted) Navigator.pop(context, true);
       return;
     }
 
-    final shouldLeave = await showDialog<bool>(
+    // Nothing started (e.g. loading failed): just leave.
+    if (provider.session == null || provider.isGameFinished) {
+      if (mounted) Navigator.pop(context, true);
+      return;
+    }
+
+    final choice = await showModalBottomSheet<_LeaveChoice>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) =>
+          _LeaveMatchSheet(saveFailed: provider.hasSnapshotSaveError),
+    );
+
+    if (!mounted || choice == null || choice == _LeaveChoice.stay) return;
+
+    if (choice == _LeaveChoice.pause) {
+      await _leave(cancel: false);
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('مغادرة المباراة؟'),
+        title: const Text('إلغاء المباراة نهائيًا؟'),
         content: const Text(
-          'الحالة الحالية للمباراة لن يتم حفظها كحالة قابلة للاستكمال في هذه المرحلة.',
+          'لن تُحسب هذه المباراة في ترتيب البطولة، ولن يمكن استكمالها بعد الإلغاء.',
         ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('البقاء'),
+            child: const Text('رجوع'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('مغادرة'),
+            child: const Text('إلغاء المباراة'),
           ),
         ],
       ),
     );
 
-    if (shouldLeave == true && mounted) Navigator.pop(context);
+    if (confirmed == true && mounted) await _leave(cancel: true);
+  }
+
+  Future<void> _leave({required bool cancel}) async {
+    setState(() => _leaving = true);
+    try {
+      // Let the last roll/move finish saving so nothing is written after
+      // the player left (or after the match was cancelled).
+      await provider.waitForPendingSave();
+      if (cancel) await sl<CancelMatch>()(widget.matchId);
+      if (!mounted) return;
+
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      Navigator.pop(context, true);
+      messenger
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              cancel
+                  ? 'تم إلغاء المباراة.'
+                  : 'تم حفظ المباراة. تقدر تكملها من قائمة المباريات بزر "استكمال".',
+            ),
+          ),
+        );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _leaving = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('تعذر إلغاء المباراة: $e')));
+    }
   }
 
   @override
@@ -100,81 +166,99 @@ class _MatchGamePageState extends State<MatchGamePage> {
       value: provider,
       child: Consumer<MatchGameProvider>(
         builder: (context, gameProvider, _) {
-          return Scaffold(
-            appBar: AppBar(
-              toolbarHeight: 48,
-              centerTitle: true,
-              title: const Text(
-                'LudoRank',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              leading: IconButton(
-                onPressed: gameProvider.isLoading ? null : _handleBack,
-                tooltip: 'رجوع',
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              actions: <Widget>[
-                if (gameProvider.isGameFinished && !gameProvider.isFinished)
-                  IconButton(
-                    onPressed: gameProvider.isLoading
-                        ? null
-                        : gameProvider.retryFinishPersistence,
-                    tooltip: 'إعادة حفظ النتيجة',
-                    icon: const Icon(Icons.sync),
-                  )
-                else
-                  const SoundToggleButton(),
-              ],
-              bottom: const PreferredSize(
-                preferredSize: Size.fromHeight(1),
-                child: Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: Color(0xFF51465E),
+          return PopScope<Object?>(
+            canPop: _canPopFreely,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _handleBack();
+            },
+            child: Scaffold(
+              appBar: AppBar(
+                toolbarHeight: 48,
+                centerTitle: true,
+                title: const Text(
+                  'LudoRank',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+                leading: IconButton(
+                  onPressed: gameProvider.isLoading || _leaving
+                      ? null
+                      : _handleBack,
+                  tooltip: 'رجوع',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                actions: <Widget>[
+                  if (gameProvider.isGameFinished && !gameProvider.isFinished)
+                    IconButton(
+                      onPressed: gameProvider.isLoading
+                          ? null
+                          : gameProvider.retryFinishPersistence,
+                      tooltip: 'إعادة حفظ النتيجة',
+                      icon: const Icon(Icons.sync),
+                    )
+                  else
+                    const SoundToggleButton(),
+                ],
+                bottom: const PreferredSize(
+                  preferredSize: Size.fromHeight(1),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Color(0xFF51465E),
+                  ),
                 ),
               ),
-            ),
-            body: SafeArea(
-              top: false,
-              child: Stack(
-                children: <Widget>[
-                  _LiveMatchLayout(
-                    provider: gameProvider,
-                    onTokenTap: _onTokenTap,
-                    onMove: _executeMove,
-                  ),
-                  if (gameProvider.error != null)
-                    Positioned(
-                      left: 10,
-                      right: 10,
-                      bottom: 8,
-                      child: _ErrorBanner(
-                        message: gameProvider.error!,
-                        onClose: gameProvider.clearError,
-                      ),
+              body: SafeArea(
+                top: false,
+                child: Stack(
+                  children: <Widget>[
+                    _LiveMatchLayout(
+                      provider: gameProvider,
+                      onTokenTap: _onTokenTap,
+                      onMove: _executeMove,
                     ),
-                  if (gameProvider.isGameFinished)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        ignoring: gameProvider.isLoading,
-                        child: LudoGameResultOverlay(
-                          players: gameProvider.completedPlayers,
-                          playerNames: widget.playerNames,
-                          isSaved: gameProvider.isFinished,
-                          isLoading: gameProvider.isLoading,
-                          onRetry: gameProvider.retryFinishPersistence,
-                          onClose: gameProvider.isFinished
-                              ? () => Navigator.pop(context, true)
-                              : null,
-                          gameResult: gameProvider.result,
-                          matchPlayers:
-                              gameProvider.session?.matchPlayers ??
-                              const <MatchPlayer>[],
-                          gamePlayers: gameProvider.players,
+                    if (gameProvider.rollNotice != null)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Center(
+                            child: _RollNoticeBanner(
+                              notice: gameProvider.rollNotice!,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                    if (gameProvider.error != null)
+                      Positioned(
+                        left: 10,
+                        right: 10,
+                        bottom: 8,
+                        child: _ErrorBanner(
+                          message: gameProvider.error!,
+                          onClose: gameProvider.clearError,
+                        ),
+                      ),
+                    if (gameProvider.isGameFinished)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          ignoring: gameProvider.isLoading,
+                          child: LudoGameResultOverlay(
+                            players: gameProvider.completedPlayers,
+                            playerNames: widget.playerNames,
+                            isSaved: gameProvider.isFinished,
+                            isLoading: gameProvider.isLoading,
+                            onRetry: gameProvider.retryFinishPersistence,
+                            onClose: gameProvider.isFinished
+                                ? () => Navigator.pop(context, true)
+                                : null,
+                            gameResult: gameProvider.result,
+                            matchPlayers:
+                                gameProvider.session?.matchPlayers ??
+                                const <MatchPlayer>[],
+                            gamePlayers: gameProvider.players,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           );
@@ -422,6 +506,115 @@ class _ErrorBanner extends StatelessWidget {
               onPressed: onClose,
               icon: const Icon(Icons.close),
               color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _LeaveChoice { stay, pause, cancel }
+
+class _LeaveMatchSheet extends StatelessWidget {
+  final bool saveFailed;
+
+  const _LeaveMatchSheet({required this.saveFailed});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text(
+              'الخروج من المباراة',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              saveFailed
+                  ? 'تنبيه: آخر حركة لم تُحفظ. لو خرجت، المباراة هتكمل من آخر حالة محفوظة.'
+                  : 'المباراة محفوظة بعد كل رمية وحركة.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: saveFailed ? scheme.error : scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, _LeaveChoice.stay),
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('كمّل اللعب'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context, _LeaveChoice.pause),
+              icon: const Icon(Icons.pause_rounded),
+              label: const Text('إيقاف مؤقت والخروج (تكملها بعدين)'),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: scheme.error),
+              onPressed: () => Navigator.pop(context, _LeaveChoice.cancel),
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('إلغاء المباراة نهائيًا'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shows a roll that ended the turn without a move, so players see what
+/// was rolled before the next player's card takes over.
+class _RollNoticeBanner extends StatelessWidget {
+  final RollNotice notice;
+
+  const _RollNoticeBanner({required this.notice});
+
+  @override
+  Widget build(BuildContext context) {
+    final message = notice.turnCancelled
+        ? 'تالت 6 في نفس الدور: الدور اتلغى'
+        : 'مفيش حركة متاحة';
+
+    return Material(
+      elevation: 10,
+      color: const Color(0xEE1B1524),
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            MatchDieFace(value: notice.value, size: 40),
+            const SizedBox(width: 12),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  notice.playerName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
             ),
           ],
         ),

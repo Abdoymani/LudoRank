@@ -70,6 +70,13 @@ class LudoMatchBoard extends StatefulWidget {
 
 class _LudoMatchBoardState extends State<LudoMatchBoard>
     with SingleTickerProviderStateMixin {
+  /// Time for one square. Each square is its own eased hop, so the piece
+  /// lands on every cell (with its step sound) instead of gliding past.
+  static const Duration stepDuration = Duration(milliseconds: 210);
+
+  /// Leaving the base is one longer hop onto the start square.
+  static const Duration exitDuration = Duration(milliseconds: 320);
+
   late final AnimationController _controller;
 
   MoveOption? _animatingMove;
@@ -133,9 +140,11 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
               clipBehavior: Clip.none,
               children: <Widget>[
                 Positioned.fill(
-                  child: LudoMatchBoardArt(
-                    players: widget.players,
-                    hiddenTokenId: _animatingTokenId,
+                  child: RepaintBoundary(
+                    child: LudoMatchBoardArt(
+                      players: widget.players,
+                      hiddenTokenId: _animatingTokenId,
+                    ),
                   ),
                 ),
 
@@ -154,7 +163,19 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                 ),
 
                 if (_animatingMove != null)
-                  _buildAnimatedToken(frame: frame, innerSide: innerSide),
+                  Positioned.fill(
+                    child: RepaintBoundary(
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: <Widget>[
+                          _buildAnimatedToken(
+                            frame: frame,
+                            innerSide: innerSide,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (widget.selectableRolls.isNotEmpty &&
                     widget.selectedTokenId != null)
                   _buildSelectedTokenDice(frame: frame, innerSide: innerSide),
@@ -283,10 +304,11 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       _animationPath = positions;
     });
 
-    // تحديد مدة الحركة قبل تشغيل الأنيميشن.
-    _controller.duration = Duration(
-      milliseconds: math.max(220, (positions.length - 1) * 180),
-    );
+    // تحديد مدة الحركة قبل تشغيل الأنيميشن: كل مربع قفزة بزمن ثابت.
+    final hops = positions.length - 1;
+    _controller.duration = move is ExitToken
+        ? exitDuration
+        : stepDuration * hops;
 
     // تشغيل الحركة من البداية.
     _controller.forward(from: 0);
@@ -358,12 +380,23 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     };
   }
 
+  /// Progress inside the current hop, 0..1 (linear).
+  double _hopFraction() {
+    final hops = _animationPath.length - 1;
+    if (hops <= 0) return 0;
+    final scaled = _controller.value * hops;
+    final index = scaled.floor().clamp(0, hops - 1);
+    return (scaled - index).clamp(0.0, 1.0);
+  }
+
   Offset _animatedCenter(double innerSide) {
     final count = _animationPath.length;
     final geometry = LudoBoardGeometry.instance;
     final scaled = _controller.value * (count - 1);
     final index = scaled.floor().clamp(0, count - 2);
-    final fraction = (scaled - index).clamp(0.0, 1.0);
+    final fraction = Curves.easeInOut.transform(
+      (scaled - index).clamp(0.0, 1.0),
+    );
 
     final from = geometry.cellCenter(_animationPath[index], innerSide);
     final to = geometry.cellCenter(_animationPath[index + 1], innerSide);
@@ -528,13 +561,15 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       animation: _controller,
       builder: (context, child) {
         final center = _animatedCenter(innerSide);
+        // A small lift in the middle of each hop.
+        final lift = math.sin(math.pi * _hopFraction());
 
         return Positioned(
           left: frame + center.dx - diameter / 2,
-          top: frame + center.dy - diameter / 2,
+          top: frame + center.dy - diameter / 2 - lift * diameter * .18,
           width: diameter,
           height: diameter,
-          child: child!,
+          child: Transform.scale(scale: 1 + lift * .16, child: child),
         );
       },
       child: Container(

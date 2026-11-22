@@ -157,6 +157,15 @@ LazyDatabase _openConnection() {
 
     debugPrint(file.path);
 
-    return NativeDatabase(file);
+    // SQLite runs on its own isolate so saving the board after every roll
+    // and move never blocks animation frames. WAL + synchronous=NORMAL keeps
+    // each save to one sequential write instead of a full journal fsync.
+    return NativeDatabase.createInBackground(
+      file,
+      setup: (database) {
+        database.execute('PRAGMA journal_mode = WAL');
+        database.execute('PRAGMA synchronous = NORMAL');
+      },
+    );
   });
 }

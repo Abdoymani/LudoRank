@@ -33,7 +33,7 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
   );
 
   final AppSettings _settings;
-  final Map<GameSound, List<AudioPlayer>> _players = {};
+  final Map<GameSound, List<Future<AudioPlayer>>> _players = {};
   final Map<GameSound, int> _next = {};
   bool _enabled;
   bool _disposed = false;
@@ -58,29 +58,64 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
     unawaited(_play(sound));
   }
 
+  /// Loads every sound once (asset copy + native decode), so the first roll
+  /// and the first token steps play on time instead of after a load.
+  Future<void> preload() async {
+    for (final sound in GameSound.values) {
+      if (_disposed) return;
+      try {
+        await _playerAt(sound, 0);
+      } catch (error) {
+        debugPrint('Sound ${sound.name} preload failed: $error');
+      }
+    }
+  }
+
+  /// Returns pool slot [index] for [sound], creating it with its source
+  /// already loaded. Players are reused: replaying is stop + resume, never a
+  /// new load, which is what made step sounds lag behind the token.
+  Future<AudioPlayer> _playerAt(GameSound sound, int index) {
+    final pool = _players.putIfAbsent(sound, () => <Future<AudioPlayer>>[]);
+    while (pool.length <= index) {
+      final slot = pool.length;
+      final created = _createPlayer(sound);
+      pool.add(created);
+      // A failed load is retried on the next play instead of staying broken.
+      unawaited(
+        created.then<void>(
+          (_) {},
+          onError: (Object _) {
+            if (slot < pool.length && identical(pool[slot], created)) {
+              pool.removeRange(slot, pool.length);
+            }
+          },
+        ),
+      );
+    }
+    return pool[index];
+  }
+
+  Future<AudioPlayer> _createPlayer(GameSound sound) async {
+    final player = AudioPlayer();
+    await player.setAudioContext(effectsAudioContext);
+    await player.setReleaseMode(ReleaseMode.stop);
+    await player.setPlayerMode(PlayerMode.lowLatency);
+    await player.setVolume(sound.volume);
+    await player.setSource(AssetSource(sound.asset));
+    return player;
+  }
+
   Future<void> _play(GameSound sound) async {
     try {
-      final pool = _players.putIfAbsent(sound, () => <AudioPlayer>[]);
       final index = _next[sound] ?? 0;
       _next[sound] = (index + 1) % _playersPerSound;
 
-      AudioPlayer player;
-      if (index < pool.length) {
-        player = pool[index];
-        await player.stop();
-      } else {
-        player = AudioPlayer();
-        await player.setAudioContext(effectsAudioContext);
-        await player.setReleaseMode(ReleaseMode.stop);
-        pool.add(player);
-      }
-
-      await player.play(
-        AssetSource(sound.asset),
-        volume: sound.volume,
-        mode: PlayerMode.lowLatency,
-        ctx: effectsAudioContext,
-      );
+      final player = await _playerAt(sound, index);
+      if (!_enabled || _disposed) return;
+      // Low-latency players never report completion, so always stop first:
+      // it rewinds the loaded sound and lets resume() start a fresh stream.
+      await player.stop();
+      await player.resume();
     } catch (error) {
       // Sound is never allowed to break the game.
       debugPrint('Sound ${sound.name} failed: $error');
@@ -89,9 +124,9 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
 
   Future<void> _stopAll() async {
     for (final pool in _players.values) {
-      for (final player in pool) {
+      for (final pending in pool) {
         try {
-          await player.stop();
+          await (await pending).stop();
         } catch (_) {}
       }
     }
@@ -101,8 +136,8 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
   void dispose() {
     _disposed = true;
     for (final pool in _players.values) {
-      for (final player in pool) {
-        unawaited(player.dispose());
+      for (final pending in pool) {
+        unawaited(pending.then((player) => player.dispose(), onError: (_) {}));
       }
     }
     _players.clear();

@@ -7,6 +7,8 @@ import 'package:ludo_rank/features/match_players/domain/entities/match_player.da
 import 'package:ludo_rank/features/matches/data/repositories/match_game_state_repository_impl.dart';
 import 'package:ludo_rank/features/matches/data/repositories/match_repository_impl.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
+import 'package:ludo_rank/features/matches/domain/repositories/match_game_state_repository.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/create_match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
@@ -81,6 +83,7 @@ void main() {
     cancelMatch = CancelMatch(
       matchRepository: matches,
       gameStateRepository: MatchGameStateRepositoryImpl(database.matchDao),
+      transactionRunner: DriftTransactionRunner(database),
     );
 
     await tournaments.addTournament(
@@ -316,5 +319,35 @@ void main() {
       await cancelMatch(cancelled.id);
       await expectLater(cancelMatch(cancelled.id), throwsStateError);
     });
+
+    test('cancel is all-or-nothing: a failed snapshot clear keeps the match '
+        'playing', () async {
+      final playing = await create();
+      await setStatus(playing, MatchStatus.playing);
+
+      final failing = CancelMatch(
+        matchRepository: matches,
+        gameStateRepository: _FailingClearRepository(),
+        transactionRunner: DriftTransactionRunner(database),
+      );
+
+      await expectLater(failing(playing.id), throwsStateError);
+      expect((await matches.getById(playing.id))!.status, MatchStatus.playing);
+    });
   });
+}
+
+class _FailingClearRepository implements MatchGameStateRepository {
+  @override
+  Future<void> clearGameState(String matchId) async =>
+      throw StateError('clear failed');
+
+  @override
+  Future<LudoGameState?> loadGameState(String matchId) async => null;
+
+  @override
+  Future<void> saveGameState({
+    required String matchId,
+    required LudoGameState state,
+  }) async {}
 }
