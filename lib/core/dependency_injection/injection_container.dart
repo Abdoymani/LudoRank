@@ -1,3 +1,4 @@
+import 'package:ludo_rank/core/transactions/transaction_runner.dart';
 import 'package:get_it/get_it.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
 import 'package:ludo_rank/core/settings/app_settings.dart';
@@ -103,6 +104,7 @@ Future<void> initDependencies() async {
       matchRepository: sl<MatchRepository>(),
       matchPlayerRepository: sl<MatchPlayerRepository>(),
       tournamentLifecycle: sl<TournamentLifecycleService>(),
+      transactionRunner: DriftTransactionRunner(sl<AppDatabase>()),
     ),
   );
 

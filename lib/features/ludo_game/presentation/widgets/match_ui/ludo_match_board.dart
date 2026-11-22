@@ -10,6 +10,7 @@ import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_ui_colors.dart';
 import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
+import 'package:ludo_rank/features/ludo_game/domain/services/ludo_move_tracer.dart';
 
 import 'dart:async';
 import 'package:ludo_rank/core/audio/game_sound.dart';
@@ -259,41 +260,18 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       // الخروج من مكان القطعة داخل البيت إلى نقطة البداية.
       positions.add(path.startingPosition);
     } else if (move is MoveToken) {
-      var step = token.positionInPath;
-      var homeEntryPending =
-          token.homeEntryPending ||
-          path.isParkedOnMainLoopEnd(
-            step: token.positionInPath,
-            position: token.position,
-          );
-      var destinationUsesHomeLane = false;
+      // نفس حساب المحرك بالظبط (LudoMoveTracer) عشان الأنيميشن
+      // ما يمشيش في طريق والقطعة تقف في مكان تاني.
+      final trace = LudoMoveTracer.trace(
+        path: path,
+        hasCaptured: player.hasCaptured,
+        token: token,
+        steps: move.steps,
+      );
 
-      for (var i = 0; i < move.steps; i++) {
-        if (step == LudoPath.finishStep) return;
+      if (trace == null) return;
 
-        // نفس تفسير المحرك للخطوة 51 والحارة المنزلية.
-        final useHomeLane =
-            player.hasCaptured &&
-            !(homeEntryPending && step == LudoPath.lastMainLoopStep);
-
-        final nextStep = path.nextStep(
-          currentStep: step,
-          useHomeLane: useHomeLane,
-        );
-
-        destinationUsesHomeLane =
-            useHomeLane && nextStep >= LudoPath.homeLaneStartStep;
-
-        if (destinationUsesHomeLane && nextStep == LudoPath.homeLaneStartStep) {
-          homeEntryPending = false;
-        }
-
-        step = nextStep;
-
-        positions.add(
-          path.positionAt(step: step, useHomeLane: destinationUsesHomeLane),
-        );
-      }
+      positions.addAll(trace.map((pathStep) => pathStep.position));
     }
 
     if (positions.length < 2) return;

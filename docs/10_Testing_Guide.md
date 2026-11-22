@@ -22,6 +22,7 @@ flutter test test/features/ludo_game/engine_regressions_test.dart
 | --- | --- |
 | `test/ludo_game_engine_test.dart` | قواعد اللعبة كلها |
 | `test/features/ludo_game/engine_regressions_test.dart` | باج خانة 51 + قاعدة الثلاث ستات |
+| `test/features/ludo_game/engine_simulation_test.dart` | 600 مباراة عشوائية كاملة، وبيتأكد من القواعد بعد كل حركة. لو وقع، الرسالة فيها رقم الـ seed عشان تعيد نفس المباراة |
 | `test/core/database/*` | الجداول، الفهارس، المايجريشن |
 | `test/features/tournaments/...` | حالة البطولة، الترتيب، إلغاء المباراة |
 | `test/features/matches/...` | تشغيل المباراة وحفظها واسترجاعها، واختيار الصوت لكل رمية وحركة |
