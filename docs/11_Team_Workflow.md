@@ -33,7 +33,7 @@
   1. ترفع `schemaVersion` في `database.dart`.
   2. تكتب migration في `onUpgrade`.
   3. تشغّل `dart run build_runner build --delete-conflicting-outputs`.
-  4. تكتب اختبار migration (شوف `test/core/database/schema_v4_test.dart`).
+  4. تكتب اختبار migration (شوف `test/core/database/schema_v5_test.dart` لأبسط مثال).
   ولو ما عملتش كده، الموبايلات اللي عليها النسخة القديمة هتقع.
 - **قواعد اللعبة:** أي تغيير لازم يتكتب في [08_Decisions.md](08_Decisions.md) ويكون عليه اختبار.
 - **ما ترفعش** ملفات `build/` ولا مفاتيح التوقيع (`key.properties`، `*.jks`).

@@ -1,3 +1,4 @@
+import 'package:ludo_rank/core/transactions/transaction_runner.dart';
 import 'package:get_it/get_it.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
@@ -96,6 +97,7 @@ Future<void> initDependencies() async {
       matchRepository: sl<MatchRepository>(),
       matchPlayerRepository: sl<MatchPlayerRepository>(),
       tournamentLifecycle: sl<TournamentLifecycleService>(),
+      transactionRunner: DriftTransactionRunner(sl<AppDatabase>()),
     ),
   );
 

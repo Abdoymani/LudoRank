@@ -37,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   /// Constructor used by database migration tests.
   AppDatabase.forTesting(super.executor);
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -76,6 +76,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         await _migrateTo4(m);
       }
+
+      // Migration 4 -> 5:
+      // Tournaments created before the status lifecycle existed stayed
+      // draft/ready even after their matches were played, so they could
+      // never be finished. Any tournament that already has a match is
+      // running (the same rule as creating the first match today).
+      if (from < 5) {
+        await _markStartedTournamentsRunning();
+      }
     },
 
     beforeOpen: (details) async {
@@ -84,6 +93,17 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  Future<void> _markStartedTournamentsRunning() async {
+    await customStatement('''
+      UPDATE tournaments
+      SET status = 'running'
+      WHERE status IN ('draft', 'ready')
+        AND EXISTS (
+          SELECT 1 FROM matches WHERE matches.tournament_id = tournaments.id
+        )
+    ''');
+  }
 
   Future<void> _migrateTo4(Migrator m) async {
     // 1. Remove duplicated rows that the old schema allowed.

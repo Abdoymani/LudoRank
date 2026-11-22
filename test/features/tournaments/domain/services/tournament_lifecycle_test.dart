@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ludo_rank/core/transactions/transaction_runner.dart';
 import 'package:ludo_rank/core/database/database.dart' as db;
 import 'package:ludo_rank/features/match_players/data/repositories/match_player_repository_impl.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
@@ -75,6 +76,7 @@ void main() {
       matchRepository: matches,
       matchPlayerRepository: MatchPlayerRepositoryImpl(database.matchPlayerDao),
       tournamentLifecycle: lifecycle,
+      transactionRunner: DriftTransactionRunner(database),
     );
     cancelMatch = CancelMatch(
       matchRepository: matches,
@@ -143,6 +145,44 @@ void main() {
       expect(await tournamentStatus(), TournamentStatus.draft);
       await create();
       expect(await tournamentStatus(), TournamentStatus.running);
+    });
+
+    test('a failed match creation saves nothing', () async {
+      final match = Match(
+        id: 'broken',
+        tournamentId: 't1',
+        playersCount: 2,
+        status: MatchStatus.pending,
+        createdAt: _now,
+        updatedAt: _now,
+      );
+
+      // 'ghost' is not a real player, so inserting the match players
+      // fails on the foreign key after the match row was written.
+      await expectLater(
+        createMatch(
+          match: match,
+          players: [
+            for (final (seat, playerId) in [(1, 'p1'), (2, 'ghost')])
+              MatchPlayer(
+                id: 'broken-$seat',
+                matchId: match.id,
+                playerId: playerId,
+                seat: seat,
+                points: 0,
+                finished: false,
+              ),
+          ],
+        ),
+        throwsA(anything),
+      );
+
+      expect(await matches.getById('broken'), isNull);
+      expect(await database.select(database.matchPlayers).get(), isEmpty);
+      expect(await tournamentStatus(), TournamentStatus.draft);
+
+      // The next real match still gets number 1.
+      expect((await create()).matchNumber, 1);
     });
 
     test('matches get numbers 1, 2, 3', () async {
