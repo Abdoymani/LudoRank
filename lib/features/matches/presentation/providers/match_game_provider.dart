@@ -2,6 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:ludo_rank/core/audio/game_sound.dart';
+import 'package:ludo_rank/core/audio/sound_controller.dart';
+import 'package:ludo_rank/features/matches/presentation/providers/game_sound_events.dart';
+
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
@@ -20,6 +24,9 @@ import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
 
 class MatchGameProvider extends ChangeNotifier {
   final MatchGameService service;
+
+  /// Plays game sound effects. Null in tests (silent).
+  final GameSoundPlayer? sounds;
 
   MatchGameSession? _session;
 
@@ -41,7 +48,7 @@ class MatchGameProvider extends ChangeNotifier {
   bool _isSavingSnapshot = false;
   bool _snapshotSaveFailed = false;
 
-  MatchGameProvider({required this.service});
+  MatchGameProvider({required this.service, this.sounds});
   // ============================================================
   // CONSTRUCTOR AND DESTRUCTOR isAutoMove
   // ======================================
@@ -403,7 +410,11 @@ class MatchGameProvider extends ChangeNotifier {
       _isAutoMoveExecuting = false;
 
       // المحرك وحده مسؤول عن قواعد رمي النرد.
+      final stateBeforeRoll = currentSession.engine.state;
       currentSession.engine.rollDice();
+      _playSounds(
+        GameSoundEvents.forRoll(stateBeforeRoll, currentSession.engine.state),
+      );
 
       // الحفاظ على منطق اكتشاف الحركة الوحيدة كما هو.
       final legalMoves = availableMoves;
@@ -652,7 +663,14 @@ class MatchGameProvider extends ChangeNotifier {
       _error = null;
 
       // 1. تنفيذ الحركة من خلال المحرك فقط.
+      final stateBeforeMove = currentSession.engine.state;
       currentSession.engine.executeMove(move);
+      final moveSound = GameSoundEvents.forMove(
+        stateBeforeMove,
+        currentSession.engine.state,
+        move,
+      );
+      if (moveSound != null) sounds?.play(moveSound);
 
       // 2. مسح اختيارات اللاعب والحركة المعلقة.
       _selectedTokenId = null;
@@ -869,5 +887,22 @@ class MatchGameProvider extends ChangeNotifier {
     _error = message;
 
     notifyListeners();
+  }
+
+  void _playSounds(List<GameSound> list) {
+    final player = sounds;
+    if (player == null) return;
+    // Follow-up sounds (six, cancelled) wait for the dice rattle to end.
+    for (var i = 0; i < list.length; i++) {
+      final sound = list[i];
+      if (i == 0) {
+        player.play(sound);
+      } else {
+        Future<void>.delayed(
+          Duration(milliseconds: 420 * i),
+          () => player.play(sound),
+        );
+      }
+    }
   }
 }

@@ -1,4 +1,6 @@
 import 'package:get_it/get_it.dart';
+import 'package:ludo_rank/core/audio/sound_controller.dart';
+import 'package:ludo_rank/core/settings/app_settings.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 
@@ -54,6 +56,11 @@ import 'package:ludo_rank/features/tournaments/presentation/providers/tournament
 final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
+  // Settings (theme, sound) and app-wide sound effects.
+  final settings = await AppSettings.load();
+  sl.registerSingleton<AppSettings>(settings);
+  sl.registerSingleton<SoundController>(SoundController(settings));
+
   // Database
 
   sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
@@ -167,7 +174,10 @@ Future<void> initDependencies() async {
     () => MatchPlayerProvider(sl<MatchPlayerRepository>()),
   );
   sl.registerFactory<MatchGameProvider>(
-    () => MatchGameProvider(service: sl<MatchGameService>()),
+    () => MatchGameProvider(
+      service: sl<MatchGameService>(),
+      sounds: sl<SoundController>(),
+    ),
   );
 
   // Validator

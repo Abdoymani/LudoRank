@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:ludo_rank/core/settings/app_settings.dart';
 
 class ThemeController extends ChangeNotifier {
-  static const String _themeKey = 'theme_mode';
-
-  final Box _settingsBox;
+  final AppSettings _settings;
 
   late ThemeMode _themeMode;
 
-  ThemeController({required Box settingsBox}) : _settingsBox = settingsBox {
-    final savedMode = _settingsBox.get(_themeKey, defaultValue: 'system');
-
-    _themeMode = _parseThemeMode(savedMode);
+  ThemeController({required AppSettings settings}) : _settings = settings {
+    _themeMode = _parseThemeMode(_settings.themeMode);
   }
 
   ThemeMode get themeMode => _themeMode;
@@ -39,7 +35,7 @@ class ThemeController extends ChangeNotifier {
     };
 
     // Save the new setting before updating the UI.
-    await _settingsBox.put(_themeKey, savedValue);
+    await _settings.setThemeMode(savedValue);
 
     _themeMode = mode;
     notifyListeners();

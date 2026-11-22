@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ludo_rank/app/theme_controller.dart';
+import 'package:ludo_rank/shared/widgets/sound_toggle_button.dart';
 
 class AppScaffold extends StatelessWidget {
   final String title;
@@ -29,6 +30,8 @@ class AppScaffold extends StatelessWidget {
         centerTitle: true,
         actions: [
           ...?actions,
+
+          const SoundToggleButton(),
 
           Consumer<ThemeController>(
             builder: (context, themeController, child) {
