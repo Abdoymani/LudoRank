@@ -9,6 +9,8 @@ import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/create_match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
+import 'package:ludo_rank/features/tournament_players/data/repositories/tournament_player_repository_impl.dart';
+import 'package:ludo_rank/features/tournament_players/domain/entities/tournament_player.dart';
 import 'package:ludo_rank/features/tournaments/data/repositories/tournament_repository_impl.dart';
 import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
@@ -189,6 +191,45 @@ void main() {
 
       await expectLater(create(), throwsStateError);
       expect(await matches.getTournamentMatches('t1'), hasLength(2));
+    });
+
+    // Decision (docs/08_Decisions.md): players may join a RUNNING tournament.
+    test(
+      'players can still be added while the tournament is running',
+      () async {
+        await create();
+        expect(await tournamentStatus(), TournamentStatus.running);
+        expect(
+          TournamentStatusTransitions.isOpen(TournamentStatus.running),
+          isTrue,
+        );
+
+        final tournamentPlayers = TournamentPlayerRepositoryImpl(
+          database.tournamentPlayerDao,
+        );
+        await tournamentPlayers.addPlayer(
+          TournamentPlayer(
+            id: 'tp-late',
+            tournamentId: 't1',
+            playerId: 'p2',
+            joinedAt: _now,
+          ),
+        );
+
+        final joined = await tournamentPlayers.getTournamentPlayers('t1');
+        expect(joined.map((p) => p.playerId), contains('p2'));
+      },
+    );
+
+    test('finished and cancelled tournaments are closed to new players', () {
+      expect(
+        TournamentStatusTransitions.isOpen(TournamentStatus.finished),
+        isFalse,
+      );
+      expect(
+        TournamentStatusTransitions.isOpen(TournamentStatus.cancelled),
+        isFalse,
+      );
     });
 
     test('a draft tournament cannot be finished', () async {

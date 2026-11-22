@@ -85,7 +85,7 @@ Tournament Status:
 
 Only Draft tournaments can be edited freely.
 
-Running tournaments cannot change player lists.
+Players can be added to Running tournaments (decision 2026-11-22, see 08_Decisions.md).
 
 Finished tournaments become read-only.
 
