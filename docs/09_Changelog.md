@@ -27,6 +27,7 @@
 
 ### 4. CI
 - `.github/workflows/ci.yml`: مع كل Pull Request وكل push على `main` بيتعمل فحص للتنسيق (`dart format`)، و`flutter analyze` (الـ infos مش بتفشّله)، و`flutter test`، وبعدها بناء APK (debug) بيترفع كـ artifact لمدة 7 أيام.
+- الـ CI متثبّت على Flutter **3.47.9**، لأن 3.50 بيرفض يبني أندرويد بـ Gradle 8.14 اللي في المشروع (محتاج 9.3.1). أول ما Gradle يترقّى، غيّر `flutter-version` في الـ workflow.
 
 ---
 
