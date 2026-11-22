@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-11-22: الأصوات، المكتبات، تنظيف الكود، وCI
+
+### 1. الأصوات
+- **المشكلة:** صوت خطوة القطعة كان بيطلب audio focus، فكان بيوقف أي موسيقى شغالة عند المستخدم (Spotify، YouTube…). ومفيش زرار كتم صوت، وكل خطوة كانت بتعمل `stop()` وبعدين `play()`، فكان فيه تقطيع.
+- **الإصلاح:** `SoundController` جديد في `lib/core/audio/`:
+  - على أندرويد مش بيطلب audio focus (`AndroidAudioFocus.none`، `usage = game`)، وعلى iOS بيستخدم `ambient`. يعني الأصوات بتشتغل **مع** موسيقى المستخدم، وفي iOS بتحترم زرار الصامت.
+  - وضع `lowLatency`، و3 players لكل صوت، فالخطوات السريعة ورا بعض مش بتقطع بعضها.
+  - **زرار كتم صوت** (🔊/🔇) في الـ AppBar بتاع كل الشاشات وشاشة المباراة، والاختيار بيتحفظ.
+- **أصوات جديدة (8):** خطوة، رمي النرد، 6، خروج قطعة من البيت، أكل، وصول للبيت، إلغاء الدور (تالت 6)، فوز. كلها متولّدة بالكود (`tool/generate_sounds.py`)، يعني مفيش أي حقوق ملكية لحد تاني. ولو عايز تعدّل صوت: عدّل السكربت وشغّل `python3 tool/generate_sounds.py assets/audio`.
+- **مين بيشغّل إيه:** `GameSoundEvents` (`lib/features/matches/presentation/providers/game_sound_events.dart`) بيقارن حالة اللعبة قبل وبعد الرمية أو الحركة ويقرر الصوت. اللوحة بتشغّل صوت الخطوة بس.
+- **اختبارات:** `test/features/matches/presentation/providers/game_sound_events_test.dart` و`test/core/audio/sound_controller_test.dart`.
+
+### 2. المكتبات
+- **`hive` و`hive_flutter` اتشالوا.** كانوا مستخدمين لحفظ الثيم بس، واتبدلوا بـ `shared_preferences` (من فريق Flutter) عن طريق `AppSettings` (`lib/core/settings/app_settings.dart`). **ملاحظة:** اختيار الثيم القديم مش بيتنقل، فأول مرة بعد التحديث الثيم بيرجع "حسب النظام" لحد ما المستخدم يختار تاني. ومفيش أي تأثير على البطولات والمباريات، لأنها في قاعدة البيانات.
+- **`sqlite3_flutter_libs` اتشالت.** Drift 2.35 بيستخدم `sqlite3` 3.x، وده بينزّل مكتبة SQLite الأصلية لوحده (build hooks)، فالمكتبة القديمة بقت ملهاش لازمة وآخر نسخة منها مكتوب عليها EOL. ملف قاعدة البيانات ومكانه زي ما هم.
+
+### 3. تنظيف الكود
+- اتمسح 62 ملف Dart مش مستخدمين (حوالي 3,600 سطر): البروتوتايب القديم للوحة (`ludo_board.dart`، `prototype/`، `ludo_match_prototype_page.dart`، و`ludo_match_prototype_main.dart` اللي كان متكرر مرتين)، و`ludo_match_footer.dart`، وحوالي 30 use-case مش مستخدمين، و18 ملف فاضي في `config/` و`core/theme/` و`core/tournament_engine/`.
+- اتمسح كمان: `ludorank_move_animation_fix.patch`، و`Untitled Folder/`، و`lib/README_AR.md`، و`assets/images/branding/splash_reference.png`، و`assets/audio/ludorank_token_step.mp3` (اتبدل بالأصوات الجديدة).
+- `dart format` على 4 ملفات كانوا مش متنسقين.
+
+### 4. CI
+- `.github/workflows/ci.yml`: مع كل Pull Request وكل push على `main` بيتعمل فحص للتنسيق (`dart format`)، و`flutter analyze` (الـ infos مش بتفشّله)، و`flutter test`، وبعدها بناء APK (debug) بيترفع كـ artifact لمدة 7 أيام.
+
+---
+
 ## 2026-11-22: إضافة لاعبين للبطولة الجارية
 
 - اتقرر إن إضافة لاعبين للبطولة وهي جارية **مسموحة** (زي 02). الكود كان بيسمح أصلاً، فاتضاف اختبار يثبّت ده، واتعدل سطر في 01 عشان ما يتعارضش.
