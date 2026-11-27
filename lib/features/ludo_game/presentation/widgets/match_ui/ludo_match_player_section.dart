@@ -137,6 +137,7 @@ class LudoMatchPlayerSection extends StatelessWidget {
                 child: SizedBox(
                   height: 34,
                   child: FilledButton.icon(
+                    key: const ValueKey<String>('roll-button'),
                     onPressed: canRoll ? onRoll : null,
                     style: FilledButton.styleFrom(
                       backgroundColor: color,
@@ -187,6 +188,7 @@ class LudoMatchPlayerSection extends StatelessWidget {
                       return Material(
                         color: Colors.transparent,
                         child: InkWell(
+                          key: ValueKey<String>('card-die-${roll.sequence}'),
                           borderRadius: BorderRadius.circular(7),
                           onTap: () => onAvailableRollTap(roll.sequence),
                           child: Container(
