@@ -82,6 +82,71 @@ void main() {
       expect(columnNames, contains('game_state_json'));
     },
   );
+
+  group('interrupted upgrade', () {
+    Future<Set<String>> matchColumns(sqlite.Database raw) async {
+      return raw
+          .select('PRAGMA table_info(matches)')
+          .map((row) => row['name'] as String)
+          .toSet();
+    }
+
+    test('a failing step rolls the whole upgrade back', () async {
+      await database.close();
+
+      // Make the v3 -> v4 table rebuild fail after v2 -> v3 already added
+      // its column (same name as the rebuild's temporary table).
+      final raw = sqlite.sqlite3.open(databaseFile.path);
+      raw.execute('CREATE TABLE tmp_for_copy_tournament_players (x INTEGER)');
+      raw.close();
+
+      final failing = AppDatabase.forTesting(NativeDatabase(databaseFile));
+      await expectLater(
+        failing.customSelect('SELECT 1').get(),
+        throwsA(anything),
+      );
+      await failing.close();
+
+      final check = sqlite.sqlite3.open(databaseFile.path);
+      expect(check.select('PRAGMA user_version').single.values.first, 2);
+      expect(await matchColumns(check), isNot(contains('game_state_json')));
+      check.execute('DROP TABLE tmp_for_copy_tournament_players');
+      check.close();
+
+      // Once the cause is gone, the next open upgrades normally.
+      database = AppDatabase.forTesting(NativeDatabase(databaseFile));
+      final matches = await database.select(database.matches).get();
+      expect(matches.single.id, 'match-1');
+    });
+
+    test('opens when a step ran but user_version was not written '
+        '(audit probe P2)', () async {
+      // Upgrade fully, then pretend the version write was lost.
+      await database.select(database.matches).get();
+      await database.customStatement('PRAGMA user_version = 2');
+      await database.close();
+
+      for (var i = 0; i < 2; i++) {
+        final reopened = AppDatabase.forTesting(NativeDatabase(databaseFile));
+        final matches = await reopened.select(reopened.matches).get();
+        expect(matches.single.playersCount, 2);
+        final version = await reopened
+            .customSelect('PRAGMA user_version')
+            .getSingle();
+        expect(version.read<int>('user_version'), reopened.schemaVersion);
+        await reopened.close();
+      }
+
+      // Re-running from version 1 is safe too.
+      final raw = sqlite.sqlite3.open(databaseFile.path);
+      raw.execute('PRAGMA user_version = 1');
+      raw.close();
+      database = AppDatabase.forTesting(NativeDatabase(databaseFile));
+      final matches = await database.select(database.matches).get();
+      expect(matches.single.matchNumber, 1);
+      expect(matches.single.playersCount, 2);
+    });
+  });
 }
 
 /// Creates a real SQLite database using the old schema (version 2).

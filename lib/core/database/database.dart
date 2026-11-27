@@ -46,45 +46,11 @@ class AppDatabase extends _$AppDatabase {
     },
 
     onUpgrade: (Migrator m, int from, int to) async {
-      // Migration 1 -> 2:
-      // Add playersCount and populate it from MatchPlayers.
-      if (from < 2) {
-        await m.addColumn(matches, matches.playersCount);
-
-        await customStatement('''
-          UPDATE matches
-          SET players_count = (
-            SELECT COUNT(*)
-            FROM match_players
-            WHERE match_players.match_id = matches.id
-          )
-        ''');
-      }
-
-      // Migration 2 -> 3:
-      // Add nullable JSON snapshot for the Ludo game state.
-      if (from < 3) {
-        await m.addColumn(matches, matches.gameStateJson);
-      }
-
-      // Migration 3 -> 4:
-      // - tournament_players gets a primary key and a unique
-      //   (tournament_id, player_id) index, so the same player cannot
-      //   join the same tournament twice.
-      // - matches get a real match_number (1, 2, 3, ... per tournament).
-      // - The indexes that were declared before but never created.
-      if (from < 4) {
-        await _migrateTo4(m);
-      }
-
-      // Migration 4 -> 5:
-      // Tournaments created before the status lifecycle existed stayed
-      // draft/ready even after their matches were played, so they could
-      // never be finished. Any tournament that already has a match is
-      // running (the same rule as creating the first match today).
-      if (from < 5) {
-        await _markStartedTournamentsRunning();
-      }
+      // The whole upgrade is one transaction: a crash mid-way rolls every
+      // step back. Drift writes user_version only after this returns, so
+      // each step is also idempotent in case the app dies between the
+      // commit and that write (the next open runs the same steps again).
+      await transaction(() => _upgrade(m, from));
     },
 
     beforeOpen: (details) async {
@@ -93,6 +59,63 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  Future<void> _upgrade(Migrator m, int from) async {
+    // Migration 1 -> 2:
+    // Add playersCount and populate it from MatchPlayers.
+    if (from < 2) {
+      await _addColumnIfMissing(m, matches, matches.playersCount);
+
+      await customStatement('''
+          UPDATE matches
+          SET players_count = (
+            SELECT COUNT(*)
+            FROM match_players
+            WHERE match_players.match_id = matches.id
+          )
+        ''');
+    }
+
+    // Migration 2 -> 3:
+    // Add nullable JSON snapshot for the Ludo game state.
+    if (from < 3) {
+      await _addColumnIfMissing(m, matches, matches.gameStateJson);
+    }
+
+    // Migration 3 -> 4:
+    // - tournament_players gets a primary key and a unique
+    //   (tournament_id, player_id) index, so the same player cannot
+    //   join the same tournament twice.
+    // - matches get a real match_number (1, 2, 3, ... per tournament).
+    // - The indexes that were declared before but never created.
+    if (from < 4) {
+      await _migrateTo4(m);
+    }
+
+    // Migration 4 -> 5:
+    // Tournaments created before the status lifecycle existed stayed
+    // draft/ready even after their matches were played, so they could
+    // never be finished. Any tournament that already has a match is
+    // running (the same rule as creating the first match today).
+    if (from < 5) {
+      await _markStartedTournamentsRunning();
+    }
+  }
+
+  Future<bool> _hasColumn(String table, String column) async {
+    final rows = await customSelect('PRAGMA table_info("$table")').get();
+    return rows.any((row) => row.read<String>('name') == column);
+  }
+
+  /// addColumn that does nothing when the column already exists.
+  Future<void> _addColumnIfMissing(
+    Migrator m,
+    TableInfo table,
+    GeneratedColumn column,
+  ) async {
+    if (await _hasColumn(table.actualTableName, column.name)) return;
+    await m.addColumn(table, column);
+  }
 
   Future<void> _markStartedTournamentsRunning() async {
     await customStatement('''
