@@ -139,6 +139,7 @@ Future<void> initDependencies() async {
       matchRepository: sl<MatchRepository>(),
       matchPlayerRepository: sl<MatchPlayerRepository>(),
       gameStateRepository: sl<MatchGameStateRepository>(),
+      transactionRunner: DriftTransactionRunner(sl<AppDatabase>()),
     ),
   );
 

@@ -456,6 +456,16 @@ class MatchGameProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+
+    // The app closed after the winning move but before the result was
+    // saved: the finished board was restored, so save the result now and
+    // show the result screen instead of asking for the last move again.
+    final restored = _session;
+    if (restored != null &&
+        restored.isFinished &&
+        _matchStatus != MatchStatus.finished) {
+      await _completeFinishedMatch();
+    }
   }
 
   // ============================================================
