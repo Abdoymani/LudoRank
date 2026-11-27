@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_board_art.dart';
@@ -96,6 +97,11 @@ void main() {
     expect(harness.token('a-token-0').positionInPath, 14);
     expect(harness.token('b-token-0').isInitial, isTrue);
     expect(hidden(), contains('b-token-0'));
+    expect(
+      harness.played.sounds,
+      containsAllInOrder([GameSound.capture, GameSound.tokenReturn]),
+    );
+    expect(harness.played.haptics, [GameHaptic.light]);
     expect(harness.provider!.isInputLocked, isTrue);
     expect(
       tester.widget<FilledButton>(harness.rollButton).onPressed,

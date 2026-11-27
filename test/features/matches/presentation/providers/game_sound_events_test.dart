@@ -131,6 +131,16 @@ void main() {
     });
   });
 
+  group('GameSoundEvents.hapticFor', () {
+    test('light for a capture, medium for home and win, none otherwise', () {
+      expect(GameSoundEvents.hapticFor(GameSound.capture), GameHaptic.light);
+      expect(GameSoundEvents.hapticFor(GameSound.home), GameHaptic.medium);
+      expect(GameSoundEvents.hapticFor(GameSound.win), GameHaptic.medium);
+      expect(GameSoundEvents.hapticFor(GameSound.enter), isNull);
+      expect(GameSoundEvents.hapticFor(null), isNull);
+    });
+  });
+
   group('GameSoundEvents.forMove', () {
     test('leaving the base plays the enter sound', () {
       final engine = _freshEngine();

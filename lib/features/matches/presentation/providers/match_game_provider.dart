@@ -851,6 +851,8 @@ class MatchGameProvider extends ChangeNotifier {
         move,
       );
       if (moveSound != null) sounds?.play(moveSound);
+      final haptic = GameSoundEvents.hapticFor(moveSound);
+      if (haptic != null) sounds?.haptic(haptic);
 
       // 2. مسح اختيارات اللاعب والحركة المعلقة.
       _selectedTokenId = null;

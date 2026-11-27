@@ -41,3 +41,13 @@ enum GameSound {
 
   const GameSound(this.asset, this.volume);
 }
+
+/// A short vibration that goes with a game event. Played (or not) with
+/// the same on/off switch as the sounds.
+enum GameHaptic {
+  /// A capture.
+  light,
+
+  /// A token reaching home, or the win.
+  medium,
+}

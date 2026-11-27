@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/settings/app_settings.dart';
@@ -10,6 +11,9 @@ import 'package:ludo_rank/core/settings/app_settings.dart';
 /// without depending on audio plugins (and lets tests use a fake).
 abstract interface class GameSoundPlayer {
   void play(GameSound sound);
+
+  /// A short vibration, under the same on/off switch as the sounds.
+  void haptic(GameHaptic kind);
 }
 
 /// App-wide sound effects with a persisted on/off switch.
@@ -56,6 +60,25 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
   void play(GameSound sound) {
     if (!_enabled || _disposed) return;
     unawaited(_play(sound));
+  }
+
+  @override
+  void haptic(GameHaptic kind) {
+    if (!_enabled || _disposed) return;
+    unawaited(_vibrate(kind));
+  }
+
+  Future<void> _vibrate(GameHaptic kind) async {
+    try {
+      switch (kind) {
+        case GameHaptic.light:
+          await HapticFeedback.lightImpact();
+        case GameHaptic.medium:
+          await HapticFeedback.mediumImpact();
+      }
+    } catch (error) {
+      debugPrint('Haptic ${kind.name} failed: $error');
+    }
   }
 
   /// How many players [preload] loads for [sound]. Steps play in quick

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/core/settings/app_settings.dart';
@@ -36,6 +37,18 @@ import '../../matches/presentation/providers/match_game_provider_timing_test.dar
 
 export '../../matches/presentation/providers/match_game_provider_timing_test.dart'
     show ScriptedRandom;
+
+/// Records sounds and vibrations instead of playing them.
+class RecordingSounds implements GameSoundPlayer {
+  final List<GameSound> sounds = <GameSound>[];
+  final List<GameHaptic> haptics = <GameHaptic>[];
+
+  @override
+  void play(GameSound sound) => sounds.add(sound);
+
+  @override
+  void haptic(GameHaptic kind) => haptics.add(kind);
+}
 
 /// A token still in its base.
 LudoToken homeToken(String playerId, int index) {
@@ -110,6 +123,9 @@ class MatchScreenHarness {
   final Duration autoMoveDelay;
   final Duration diceAnimationDuration;
 
+  /// What the game asked to play (sounds and vibrations).
+  final RecordingSounds played = RecordingSounds();
+
   MatchScreenHarness({
     this.autoMoveDelay = Duration.zero,
     this.diceAnimationDuration = Duration.zero,
@@ -165,6 +181,7 @@ class MatchScreenHarness {
         service: service,
         autoMoveDelay: autoMoveDelay,
         diceAnimationDuration: diceAnimationDuration,
+        sounds: played,
       );
     });
     sl.registerSingleton<CancelMatch>(
