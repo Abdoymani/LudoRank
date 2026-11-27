@@ -347,6 +347,13 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
         });
 
         _controller.reset();
+
+        // The provider may already offer the next automatic move (the
+        // rest of the turn has one legal move); start it now that this
+        // animation is cleared.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _tryStartAutomaticMove();
+        });
       }
 
       _completingMove = false;
