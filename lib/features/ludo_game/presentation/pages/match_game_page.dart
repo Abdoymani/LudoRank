@@ -160,7 +160,13 @@ class _MatchGamePageState extends State<MatchGamePage> {
       setState(() => _leaving = false);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('تعذر إلغاء المباراة: $e')));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              cancel ? 'تعذر إلغاء المباراة: $e' : 'تعذر إيقاف المباراة: $e',
+            ),
+          ),
+        );
     }
   }
 
