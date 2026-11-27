@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +37,19 @@ void main() {
 
       final restarted = SoundController(await AppSettings.load());
       expect(restarted.enabled, isFalse);
+    });
+
+    test('every sound has its generated WAV under assets/', () {
+      for (final sound in GameSound.values) {
+        final file = File('assets/${sound.asset}');
+        expect(file.existsSync(), isTrue, reason: sound.asset);
+        final bytes = file.readAsBytesSync();
+        // RIFF/WAVE, mono, 16-bit.
+        expect(String.fromCharCodes(bytes.sublist(8, 12)), 'WAVE');
+        expect(bytes[22], 1, reason: '${sound.asset} is mono');
+        expect(bytes[34], 16, reason: '${sound.asset} is 16-bit');
+        expect(bytes.length, lessThan(80 * 1024));
+      }
     });
 
     test('preload loads every step player, one player for other sounds', () {

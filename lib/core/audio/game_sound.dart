@@ -25,7 +25,13 @@ enum GameSound {
   cancelled('audio/cancelled.wav', 0.7),
 
   /// The match is over.
-  win('audio/win.wav', 0.9);
+  win('audio/win.wav', 0.9),
+
+  /// A captured token slides back to its base.
+  tokenReturn('audio/return.wav', 0.75),
+
+  /// One rank of the final result appears.
+  reveal('audio/reveal.wav', 0.6);
 
   /// Path relative to `assets/` (the form `AssetSource` expects).
   final String asset;

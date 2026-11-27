@@ -1,7 +1,10 @@
 """Synthesizes LudoRank's game sound effects as small mono WAV files.
 
 All sounds are generated from scratch (sine/noise synthesis), so they carry
-no third-party license. Usage: python3 synth.py <output_dir>
+no third-party license.
+
+Usage: python3 tool/generate_sounds.py <output_dir> [name ...]
+With names, only those sounds are written (the others stay byte-identical).
 """
 import sys
 import wave
@@ -135,15 +138,51 @@ def win():
     return b
 
 
+def token_return():
+    # a captured token slides back to its base: soft falling whoosh that
+    # lands with a small wooden plop when the token reaches its pad
+    r = np.random.default_rng(11)
+    d = 0.34
+    n = int(SR * d)
+    x = np.arange(n) / SR
+    raw = r.standard_normal(n)
+    # noise swept down by a moving one-pole low-pass
+    cutoff = np.linspace(0.35, 0.04, n)
+    whoosh = np.zeros(n)
+    acc = 0.0
+    for i in range(n):
+        acc += cutoff[i] * (raw[i] - acc)
+        whoosh[i] = acc
+    swell = np.sin(np.pi * np.clip(x / 0.30, 0, 1)) ** 1.5
+    b = silence(0.42)
+    place(b, 1.6 * whoosh * swell, 0.0)
+    place(b, 0.35 * sweep(880, 330, 0.28, 5), 0.0)
+    place(b, 0.6 * tone(260, 0.1, 40, ((1, 1.0), (2.4, 0.3))), 0.29)
+    return b
+
+
+def reveal():
+    # the final ranking appears: a short, bright two-note sparkle
+    b = silence(0.5)
+    place(b, 0.5 * bell(1318.5, 0.32, 10), 0.0)
+    place(b, 0.42 * bell(1975.5, 0.36, 9), 0.06)
+    place(b, 0.18 * bell(2637.0, 0.3, 12), 0.12)
+    return b
+
+
+# name -> (synth, sample rate). The original set is 22.05kHz; sounds added
+# later are 44.1kHz.
 SOUNDS = {
-    'step': step,
-    'dice': dice,
-    'six': six,
-    'enter': enter,
-    'capture': capture,
-    'home': home,
-    'cancelled': cancelled,
-    'win': win,
+    'step': (step, 22050),
+    'dice': (dice, 22050),
+    'six': (six, 22050),
+    'enter': (enter, 22050),
+    'capture': (capture, 22050),
+    'home': (home, 22050),
+    'cancelled': (cancelled, 22050),
+    'win': (win, 22050),
+    'return': (token_return, 44100),
+    'reveal': (reveal, 44100),
 }
 
 
@@ -166,6 +205,11 @@ def write(path, s):
 
 if __name__ == '__main__':
     out = sys.argv[1]
-    for name, fn in SOUNDS.items():
-        write(f'{out}/{name}.wav', fn())
+    only = set(sys.argv[2:])
+    for name, (fn, rate) in SOUNDS.items():
+        SR = rate
+        s = fn()  # the shared rng advances even when the file is skipped
+        if only and name not in only:
+            continue
+        write(f'{out}/{name}.wav', s)
         print('wrote', name)
