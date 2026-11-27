@@ -106,7 +106,11 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   void didUpdateWidget(covariant LudoMatchBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.pendingAutoMove == null) {
+    // A new pending move (or none) re-arms the automatic start. The
+    // provider can replace one pending move by the next in a single
+    // update (no delay between moves), so null is not the only reset.
+    if (widget.pendingAutoMove == null ||
+        !identical(widget.pendingAutoMove, oldWidget.pendingAutoMove)) {
       _startingAutoMove = false;
     }
 
@@ -682,6 +686,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
             Material(
               color: Colors.transparent,
               child: InkWell(
+                key: ValueKey<String>('board-die-${rolls[index].sequence}'),
                 borderRadius: BorderRadius.circular(7),
                 onTap: _animatingMove != null
                     ? null
