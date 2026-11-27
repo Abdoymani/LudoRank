@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:ludo_rank/core/audio/game_sound.dart';
@@ -194,6 +195,21 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                   ),
                 ),
 
+                // Pulsing rings around every token that can move, in its
+                // own layer: the board art never repaints for the pulse.
+                if (!animating)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: MovableTokenGlow(
+                          rings: _glowRings(innerSide),
+                          cell: innerSide / LudoBoardGeometry.gridSize,
+                          origin: Offset(frame, frame),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 if (!animating && widget.selectedTokenId != null)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -341,6 +357,27 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     }
 
     return nearest == null ? null : TokenTapTarget(nearest);
+  }
+
+  List<GlowRing> _glowRings(double innerSide) {
+    final movable = <String>{
+      for (final move in widget.availableMoves) _tokenIdOf(move),
+    };
+    if (movable.isEmpty) return const <GlowRing>[];
+
+    final centers = LudoTokenLayout.centers(widget.players, innerSide);
+    return <GlowRing>[
+      for (final player in widget.players)
+        if (player.playerId == widget.currentPlayerId)
+          for (final token in player.tokens)
+            if (movable.contains(token.id))
+              GlowRing(
+                tokenId: token.id,
+                center: centers[token.id]!,
+                color: matchUiColorFor(player.color),
+                selected: token.id == widget.selectedTokenId,
+              ),
+    ];
   }
 
   void _handleBoardTap(Offset point) {
@@ -796,6 +833,174 @@ class _MovingTokenPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _MovingTokenPainter oldDelegate) {
     return oldDelegate.color != color ||
+        oldDelegate.cell != cell ||
+        oldDelegate.origin != origin;
+  }
+}
+
+/// One token that can move, as the glow layer draws it.
+@immutable
+class GlowRing {
+  final String tokenId;
+  final Offset center;
+  final Color color;
+  final bool selected;
+
+  const GlowRing({
+    required this.tokenId,
+    required this.center,
+    required this.color,
+    required this.selected,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is GlowRing &&
+      other.tokenId == tokenId &&
+      other.center == center &&
+      other.color == color &&
+      other.selected == selected;
+
+  @override
+  int get hashCode => Object.hash(tokenId, center, color, selected);
+}
+
+/// Pulsing rings in the player's colour around every token that has a
+/// legal move, with a stronger ring on the selected token.
+///
+/// One controller drives all rings and it only runs while there is a
+/// ring to show. With "remove animations" on, the rings stay still.
+class MovableTokenGlow extends StatefulWidget {
+  final List<GlowRing> rings;
+  final double cell;
+  final Offset origin;
+
+  /// One pulse, out and back.
+  static const Duration period = Duration(milliseconds: 1100);
+
+  const MovableTokenGlow({
+    super.key,
+    required this.rings,
+    required this.cell,
+    required this.origin,
+  });
+
+  @override
+  State<MovableTokenGlow> createState() => _MovableTokenGlowState();
+}
+
+class _MovableTokenGlowState extends State<MovableTokenGlow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: MovableTokenGlow.period ~/ 2,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updatePulse();
+  }
+
+  @override
+  void didUpdateWidget(covariant MovableTokenGlow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _updatePulse();
+  }
+
+  void _updatePulse() {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (widget.rings.isEmpty || still) {
+      _pulse.stop();
+      _pulse.value = still ? 1 : 0;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.rings.isEmpty) return const SizedBox.expand();
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _GlowPainter(
+        pulse: _pulse,
+        rings: widget.rings,
+        cell: widget.cell,
+        origin: widget.origin,
+      ),
+    );
+  }
+}
+
+class _GlowPainter extends CustomPainter {
+  final Animation<double> pulse;
+  final List<GlowRing> rings;
+  final double cell;
+  final Offset origin;
+
+  _GlowPainter({
+    required this.pulse,
+    required this.rings,
+    required this.cell,
+    required this.origin,
+  }) : super(repaint: pulse);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = Curves.easeInOut.transform(pulse.value);
+    final tokenRadius = LudoTokenLayout.tokenRadius(cell);
+
+    for (final ring in rings) {
+      final center = origin + ring.center;
+      // No blur: plain strokes are cheap to repaint every frame.
+      if (ring.selected) {
+        canvas.drawCircle(
+          center,
+          tokenRadius + cell * (.16 + .08 * t),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = cell * .16
+            ..color = ring.color.withValues(alpha: .45 + .35 * t),
+        );
+        canvas.drawCircle(
+          center,
+          tokenRadius + cell * .06,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(2.0, cell * .1)
+            ..color = Colors.white,
+        );
+      } else {
+        canvas.drawCircle(
+          center,
+          tokenRadius + cell * (.10 + .10 * t),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = cell * (.07 + .05 * t)
+            ..color = ring.color.withValues(alpha: .35 + .5 * t),
+        );
+        canvas.drawCircle(
+          center,
+          tokenRadius + cell * .04,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = math.max(1.2, cell * .05)
+            ..color = Colors.white.withValues(alpha: .55 + .35 * t),
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlowPainter oldDelegate) {
+    return !listEquals(oldDelegate.rings, rings) ||
         oldDelegate.cell != cell ||
         oldDelegate.origin != origin;
   }

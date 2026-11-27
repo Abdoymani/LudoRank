@@ -174,12 +174,20 @@ class MatchScreenHarness {
     WidgetTester tester, {
     Size size = const Size(392.7, 800),
     double textScale = 1.0,
+    bool pulse = false,
   }) async {
     tester.view.physicalSize = size * 2.75;
     tester.view.devicePixelRatio = 2.75;
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
+    // The movable-token glow pulses forever while a move is to be chosen,
+    // which pumpAndSettle would wait on; tests opt in with [pulse].
+    if (!pulse) {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+    }
     addTearDown(tester.view.reset);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 
     await tester.pumpWidget(
       ChangeNotifierProvider<SoundController>.value(
