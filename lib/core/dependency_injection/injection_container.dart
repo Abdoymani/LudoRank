@@ -33,8 +33,6 @@ import 'package:ludo_rank/features/players/domain/repositories/player_repository
 
 import 'package:ludo_rank/features/players/presentation/providers/player_provider.dart';
 
-// أضف الـ imports الخاصة بالـ tournament
-
 import 'package:ludo_rank/features/tournaments/data/repositories/tournament_repository_impl.dart';
 import 'package:ludo_rank/features/tournaments/data/data_sources/local/tournament_dao.dart';
 
@@ -153,13 +151,6 @@ Future<void> initDependencies() async {
     ),
   );
 
-  // تأكد من وجود هذا السطر الخاص بـ MatchRepository (إذا لم يكن موجوداً)
-  ///sl.registerLazySingleton<MatchRepository>(
-  ///     () => MatchRepositoryImpl(
-  ///sl()
-  ///)
-  ///);
-
   sl.registerLazySingleton<MatchPlayerRepository>(
     () => MatchPlayerRepositoryImpl(sl<MatchPlayerDao>()),
   );
@@ -168,12 +159,6 @@ Future<void> initDependencies() async {
     () => MatchRepositoryImpl(sl<MatchDao>()),
   );
 
-  ///sl.registerLazySingleton<MatchGameService>(
-  ///   () => MatchGameService(
-  /// matchRepository: sl<MatchRepository>(),
-  ///matchPlayerRepository: sl<MatchPlayerRepository>(),
-  ///),
-  ///);
   // Provider
 
   sl.registerFactory<PlayerProvider>(
