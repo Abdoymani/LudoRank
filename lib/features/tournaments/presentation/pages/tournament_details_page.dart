@@ -81,18 +81,27 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
 
     if (result == null || result.isEmpty) return;
 
-    for (final playerId in result) {
-      await tournamentPlayerProvider.addPlayer(
+    final joinedAt = DateTime.now();
+    await tournamentPlayerProvider.addPlayers([
+      for (final playerId in result)
         TournamentPlayer(
           id: uuid.v4(),
           tournamentId: widget.tournamentId,
           playerId: playerId,
-          joinedAt: DateTime.now(),
+          joinedAt: joinedAt,
         ),
-      );
-    }
+    ]);
 
     if (!mounted) return;
+
+    final addError = tournamentPlayerProvider.error;
+    if (addError != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('تعذر إضافة اللاعبين: $addError')),
+        );
+    }
 
     await _loadStandings();
 
