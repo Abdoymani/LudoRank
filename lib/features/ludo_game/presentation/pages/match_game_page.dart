@@ -546,8 +546,24 @@ class _PlayerSlot extends StatelessWidget {
       }
       if (player == null) return null;
 
-      final isCurrent = player.playerId == p.currentPlayerId;
+      // While the die tumbles, the roller's card stays the active one with
+      // their pre-roll turn, even if the roll already passed the turn.
+      final dice = p.diceRoll;
+      final shownCurrent = dice?.playerId ?? p.currentPlayerId;
+      final isCurrent = player.playerId == shownCurrent;
       if (!isCurrent) return _CardData.waiting(player);
+
+      if (dice != null) {
+        return _CardData(
+          player: player,
+          isCurrent: true,
+          turnState: dice.turnStateBefore,
+          availableRolls: const AvailableRolls(),
+          canRoll: false,
+          selectedRollSequence: null,
+          dice: dice,
+        );
+      }
 
       return _CardData(
         player: player,
@@ -585,6 +601,14 @@ class _PlayerSlot extends StatelessWidget {
               height: height,
               onAvailableRollTap: provider.handleAvailableRollTap,
               selectedRollSequence: card.selectedRollSequence,
+              rollingDie: switch (card.dice) {
+                final dice? => (
+                  id: dice.id,
+                  value: dice.value,
+                  duration: dice.duration,
+                ),
+                null => null,
+              },
             ),
           ),
         ),
@@ -602,6 +626,7 @@ class _CardData {
   final AvailableRolls availableRolls;
   final bool canRoll;
   final int? selectedRollSequence;
+  final DiceRollAnimation? dice;
 
   const _CardData({
     required this.player,
@@ -610,6 +635,7 @@ class _CardData {
     required this.availableRolls,
     required this.canRoll,
     required this.selectedRollSequence,
+    this.dice,
   });
 
   const _CardData.waiting(this.player)
@@ -617,7 +643,8 @@ class _CardData {
       turnState = null,
       availableRolls = const AvailableRolls(),
       canRoll = false,
-      selectedRollSequence = null;
+      selectedRollSequence = null,
+      dice = null;
 
   @override
   bool operator ==(Object other) =>
@@ -627,7 +654,8 @@ class _CardData {
       other.turnState == turnState &&
       other.availableRolls == availableRolls &&
       other.canRoll == canRoll &&
-      other.selectedRollSequence == selectedRollSequence;
+      other.selectedRollSequence == selectedRollSequence &&
+      other.dice == dice;
 
   @override
   int get hashCode => Object.hash(
@@ -637,6 +665,7 @@ class _CardData {
     availableRolls,
     canRoll,
     selectedRollSequence,
+    dice,
   );
 }
 
@@ -650,59 +679,54 @@ class _BoardSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.read<MatchGameProvider>();
-    final (
-      players,
-      currentPlayerId,
-      moves,
-      selectedTokenId,
-      selectedRoll,
-      pending,
-      destinations,
-      selectableRolls,
-    ) = context
-        .select<
-          MatchGameProvider,
-          (
-            List<LudoPlayer>,
-            String?,
-            List<MoveOption>,
-            String?,
-            int?,
-            MoveOption?,
-            Map<Position, List<MoveOption>>,
-            AvailableRolls,
-          )
-        >(
-          (p) => (
-            p.players,
-            p.currentPlayerId,
-            p.availableMoves,
-            p.selectedTokenId,
-            p.selectedRollSequence,
-            p.isSnapshotSaveBlocked ? null : p.pendingAutoMove,
-            p.selectedMoveDestinations,
-            p.selectableRolls,
-          ),
-        );
+    final board = context.select<MatchGameProvider, _BoardData>(
+      (p) => (
+        players: p.players,
+        currentPlayerId: p.currentPlayerId,
+        moves: p.availableMoves,
+        selectedTokenId: p.selectedTokenId,
+        selectedRoll: p.selectedRollSequence,
+        pending: p.isSnapshotSaveBlocked ? null : p.pendingAutoMove,
+        destinations: p.selectedMoveDestinations,
+        selectableRolls: p.selectableRolls,
+        diceRolling: p.isDiceRolling,
+      ),
+    );
 
     return LudoMatchBoard(
-      players: players,
-      currentPlayerId: currentPlayerId,
-      availableMoves: moves,
-      selectedTokenId: selectedTokenId,
-      selectedRollSequence: selectedRoll,
-      pendingAutoMove: pending,
+      players: board.players,
+      currentPlayerId: board.currentPlayerId,
+      availableMoves: board.moves,
+      selectedTokenId: board.selectedTokenId,
+      selectedRollSequence: board.selectedRoll,
+      pendingAutoMove: board.pending,
       onTokenTap: onTokenTap,
-      legalMoveDestinations: destinations,
+      legalMoveDestinations: board.destinations,
       rollValueForMove: provider.rollValueForMove,
       onMoveTap: onMove,
       // الرميات التي تناسب التوكن المحدد فقط.
-      selectableRolls: selectableRolls,
+      selectableRolls: board.selectableRolls,
       onAvailableRollTap: provider.handleAvailableRollTap,
       sounds: provider.sounds,
+      inputLocked: board.diceRolling,
+      onAnimatingChanged: provider.setBoardAnimating,
     );
   }
 }
+
+/// What the board shows; records compare field by field (lists by
+/// identity, which the provider keeps stable per engine state).
+typedef _BoardData = ({
+  List<LudoPlayer> players,
+  String? currentPlayerId,
+  List<MoveOption> moves,
+  String? selectedTokenId,
+  int? selectedRoll,
+  MoveOption? pending,
+  Map<Position, List<MoveOption>> destinations,
+  AvailableRolls selectableRolls,
+  bool diceRolling,
+});
 
 class _ErrorBanner extends StatelessWidget {
   final String message;

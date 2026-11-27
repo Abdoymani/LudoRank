@@ -71,10 +71,12 @@ void main() {
   Future<MatchGameProvider> started(
     List<int> dice, {
     Duration autoMoveDelay = Duration.zero,
+    Duration diceAnimationDuration = Duration.zero,
   }) async {
     final provider = MatchGameProvider(
       service: service,
       autoMoveDelay: autoMoveDelay,
+      diceAnimationDuration: diceAnimationDuration,
     );
     service.startSession = sessionWithDice(dice);
     await provider.startMatch(matchId: match.id, playerNames: const {});
@@ -317,5 +319,92 @@ void main() {
     await resumed.resumeMatch(matchId: match.id);
 
     expect(resumed.pendingAutoMove, isA<MoveToken>());
+  });
+
+  group('dice animation', () {
+    const dice = Duration(milliseconds: 60);
+    Future<void> tumbleDone() => Future<void>.delayed(dice * 1.5);
+
+    test('stays on the roller and holds input until the die stops', () async {
+      final provider = await started([3], diceAnimationDuration: dice);
+
+      await provider.rollDice();
+
+      // The engine already passed the turn; the die is still the roller's.
+      expect(provider.currentPlayerId, 'player-2');
+      expect(provider.diceRoll?.playerId, 'player-1');
+      expect(provider.diceRoll?.value, 3);
+      expect(provider.diceRoll?.turnStateBefore.playerId, 'player-1');
+      expect(provider.isInputLocked, isTrue);
+      expect(provider.canRollDice, isFalse);
+      // The "no move" notice waits for the die to stop.
+      expect(provider.rollNotice, isNull);
+
+      await tumbleDone();
+
+      expect(provider.diceRoll, isNull);
+      expect(provider.rollNotice?.value, 3);
+      expect(provider.canRollDice, isTrue);
+      provider.dispose();
+    });
+
+    test('a second roll while the die tumbles is ignored', () async {
+      final provider = await started([6, 2], diceAnimationDuration: dice);
+
+      await provider.rollDice();
+      await provider.rollDice();
+      expect(provider.turnState?.rolls, hasLength(1));
+
+      await tumbleDone();
+      await provider.rollDice();
+      expect(provider.turnState?.rolls, hasLength(2));
+      provider.dispose();
+    });
+
+    test('the automatic move waits at least for the die', () async {
+      final provider = await started([
+        ...setupDice,
+        3,
+      ], diceAnimationDuration: dice);
+      Future<void> roll() async {
+        await provider.rollDice();
+        await tumbleDone();
+      }
+
+      await roll();
+      await roll();
+      final exit = provider.availableMoves.whereType<ExitToken>().firstWhere(
+        (move) => move.tokenId == 'player-1-token-0',
+      );
+      await provider.executeMove(exit);
+      await provider.executeMove(provider.availableMoves.single);
+      await roll();
+      expect(provider.currentPlayerId, 'player-1');
+
+      final rolling = provider.rollDice();
+      await Future<void>.delayed(dice ~/ 3);
+      expect(provider.isDiceRolling, isTrue);
+      expect(provider.pendingAutoMove, isNull);
+
+      await rolling;
+      expect(provider.isDiceRolling, isFalse);
+      expect(provider.pendingAutoMove, isA<MoveToken>());
+      provider.dispose();
+    });
+
+    test('a board animation locks taps and the roll button', () async {
+      final provider = await started([3]);
+      expect(provider.canRollDice, isTrue);
+
+      provider.setBoardAnimating(true);
+      expect(provider.isInputLocked, isTrue);
+      expect(provider.canRollDice, isFalse);
+      await provider.rollDice();
+      expect(provider.turnState?.rolls, isEmpty);
+
+      provider.setBoardAnimating(false);
+      expect(provider.canRollDice, isTrue);
+      provider.dispose();
+    });
   });
 }

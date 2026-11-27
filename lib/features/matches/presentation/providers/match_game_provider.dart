@@ -54,6 +54,12 @@ class MatchGameProvider extends ChangeNotifier {
   /// so players can see the die before the piece starts walking.
   final Duration autoMoveDelay;
 
+  /// How long the die tumbles on the roller's card. The provider owns this
+  /// timing: input waits for it, and the automatic move after a roll waits
+  /// at least this long ([autoMoveDelay] is raised to it). Zero turns the
+  /// animation off. Saving is never delayed by it.
+  final Duration diceAnimationDuration;
+
   bool _disposed = false;
 
   // Cache of engine.getValidMoves() for the current engine state. The engine
@@ -68,6 +74,7 @@ class MatchGameProvider extends ChangeNotifier {
     required this.service,
     this.sounds,
     this.autoMoveDelay = Duration.zero,
+    this.diceAnimationDuration = Duration.zero,
     this.checkpointer,
   }) {
     checkpointer?.addPendingSaveWaiter(waitForPendingSave);
@@ -85,6 +92,39 @@ class MatchGameProvider extends ChangeNotifier {
   Future<void>? _pendingSave;
 
   RollNotice? get rollNotice => _rollNotice;
+
+  // The roll whose die is still tumbling, shown on the roller's card even
+  // when the turn already passed to the next player.
+  DiceRollAnimation? _diceRoll;
+  Timer? _diceTimer;
+  int _diceRollCount = 0;
+
+  /// The roll being animated, or null.
+  DiceRollAnimation? get diceRoll => _diceRoll;
+
+  bool get isDiceRolling => _diceRoll != null;
+
+  // The board is animating a move or a captured token going home.
+  bool _boardAnimating = false;
+
+  bool get isBoardAnimating => _boardAnimating;
+
+  /// True while an animation must finish before the next tap or roll.
+  bool get isInputLocked => _diceRoll != null || _boardAnimating;
+
+  /// Called by the board when a move (and a captured token going home)
+  /// starts and when it has finished.
+  void setBoardAnimating(bool value) {
+    if (_boardAnimating == value) return;
+    _boardAnimating = value;
+    notifyListeners();
+  }
+
+  /// Wait before the automatic move after a roll: never shorter than the
+  /// dice animation.
+  Duration get _autoMoveDelayAfterRoll => diceAnimationDuration > autoMoveDelay
+      ? diceAnimationDuration
+      : autoMoveDelay;
 
   /// Display time for [rollNotice].
   static const Duration rollNoticeDuration = Duration(milliseconds: 1400);
@@ -113,6 +153,7 @@ class MatchGameProvider extends ChangeNotifier {
     _disposed = true;
     checkpointer?.removePendingSaveWaiter(waitForPendingSave);
     _rollNoticeTimer?.cancel();
+    _diceTimer?.cancel();
     for (final timer in _soundTimers) {
       timer.cancel();
     }
@@ -218,7 +259,6 @@ class MatchGameProvider extends ChangeNotifier {
     MatchGameSession session,
     String tokenId,
   ) {
-
     final result = <Position, List<MoveOption>>{};
 
     for (final move in availableMoves) {
@@ -341,6 +381,7 @@ class MatchGameProvider extends ChangeNotifier {
 
   bool get canRollDice {
     return isStarted &&
+        !isInputLocked &&
         !isLoading &&
         !isSnapshotSaveBlocked &&
         !isGameFinished &&
@@ -515,6 +556,7 @@ class MatchGameProvider extends ChangeNotifier {
 
     if (currentSession == null ||
         isLoading ||
+        isInputLocked ||
         isSnapshotSaveBlocked ||
         isGameFinished ||
         turnState?.isRolling != true) {
@@ -538,7 +580,7 @@ class MatchGameProvider extends ChangeNotifier {
       _playSounds(
         GameSoundEvents.forRoll(stateBeforeRoll, currentSession.engine.state),
       );
-      _showRollNoticeIfTurnPassed(stateBeforeRoll, currentSession);
+      _startDiceAnimation(stateBeforeRoll, currentSession);
 
       // الحركة الوحيدة تتنفذ تلقائيًا، لكن بعد ما اللاعب يشوف النرد.
       final legalMoves = availableMoves;
@@ -546,8 +588,9 @@ class MatchGameProvider extends ChangeNotifier {
       final autoMove = turnState?.isPlaying == true && legalMoves.length == 1
           ? legalMoves.single
           : null;
+      final autoDelay = _autoMoveDelayAfterRoll;
 
-      if (autoMove != null && autoMoveDelay == Duration.zero) {
+      if (autoMove != null && autoDelay == Duration.zero) {
         _pendingAutoMove = autoMove;
       }
 
@@ -565,11 +608,12 @@ class MatchGameProvider extends ChangeNotifier {
 
         notifyListeners();
 
-        if (autoMove != null && autoMoveDelay > Duration.zero) {
+        if (autoMove != null && autoDelay > Duration.zero) {
           await _offerAutoMoveAfterDelay(
             currentSession,
             stateAfterRoll,
             autoMove,
+            autoDelay,
           );
         }
       } catch (e) {
@@ -678,7 +722,7 @@ class MatchGameProvider extends ChangeNotifier {
   /// Multiple moves  -> select the token and show its move options.
   /// No legal moves  -> do not move the token.
   Future<void> handleTokenTap(LudoToken token) async {
-    if (isSnapshotSaveBlocked) {
+    if (isSnapshotSaveBlocked || isInputLocked) {
       return;
     }
     final currentSession = _session;
@@ -864,7 +908,12 @@ class MatchGameProvider extends ChangeNotifier {
       // animation bookkeeping before it can start the next move.
       if (saved && autoMove != null && autoMoveDelay > Duration.zero) {
         unawaited(
-          _offerAutoMoveAfterDelay(currentSession, stateAfterMove, autoMove),
+          _offerAutoMoveAfterDelay(
+            currentSession,
+            stateAfterMove,
+            autoMove,
+            autoMoveDelay,
+          ),
         );
       }
     } catch (e) {
@@ -878,6 +927,7 @@ class MatchGameProvider extends ChangeNotifier {
   // ============================================================
   Future<void> handleAvailableRollTap(int sequence) async {
     if (turnState?.isPlaying != true ||
+        isInputLocked ||
         isLoading ||
         isSnapshotSaveBlocked ||
         isGameFinished ||
@@ -1014,6 +1064,10 @@ class MatchGameProvider extends ChangeNotifier {
     _isSavingSnapshot = false;
     _snapshotSaveFailed = false;
 
+    _diceTimer?.cancel();
+    _diceRoll = null;
+    _boardAnimating = false;
+
     notifyListeners();
   }
 
@@ -1073,8 +1127,9 @@ class MatchGameProvider extends ChangeNotifier {
     MatchGameSession session,
     LudoGameState expectedState,
     MoveOption move,
+    Duration delay,
   ) async {
-    await Future<void>.delayed(autoMoveDelay);
+    await Future<void>.delayed(delay);
     if (!_disposed &&
         identical(_session, session) &&
         identical(session.engine.state, expectedState) &&
@@ -1088,6 +1143,32 @@ class MatchGameProvider extends ChangeNotifier {
   Future<void> _trackSave(Future<void> save) {
     _pendingSave = save;
     return save;
+  }
+
+  /// Starts the die animation of a roll from [before] (the roller's
+  /// state). A roll that passed the turn is announced when the die stops.
+  void _startDiceAnimation(LudoGameState before, MatchGameSession session) {
+    final value = session.engine.lastRolledValue;
+    if (diceAnimationDuration == Duration.zero || value == null) {
+      _showRollNoticeIfTurnPassed(before, session);
+      return;
+    }
+
+    final roller = before.players[before.currentPlayerIndex];
+    _diceRoll = DiceRollAnimation(
+      id: ++_diceRollCount,
+      playerId: roller.playerId,
+      value: value,
+      turnStateBefore: before.turnState,
+      duration: diceAnimationDuration,
+    );
+    _diceTimer?.cancel();
+    _diceTimer = Timer(diceAnimationDuration, () {
+      if (_disposed) return;
+      _diceRoll = null;
+      _showRollNoticeIfTurnPassed(before, session);
+      notifyListeners();
+    });
   }
 
   void _showRollNoticeIfTurnPassed(
@@ -1117,6 +1198,40 @@ class MatchGameProvider extends ChangeNotifier {
       notifyListeners();
     });
   }
+}
+
+/// A roll whose die is tumbling on the roller's card.
+@immutable
+class DiceRollAnimation {
+  /// Changes with every roll, so the card restarts its animation.
+  final int id;
+
+  /// Who rolled: their card keeps showing while the die tumbles, even if
+  /// the roll passed the turn.
+  final String playerId;
+
+  /// The value the die stops on.
+  final int value;
+
+  /// The roller's turn before this roll (what their card shows meanwhile).
+  final TurnState turnStateBefore;
+
+  final Duration duration;
+
+  const DiceRollAnimation({
+    required this.id,
+    required this.playerId,
+    required this.value,
+    required this.turnStateBefore,
+    required this.duration,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is DiceRollAnimation && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 /// A roll that ended the turn without a move, shown briefly to the players.

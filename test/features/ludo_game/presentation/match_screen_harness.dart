@@ -108,8 +108,12 @@ class MatchScreenHarness {
   MatchGameProvider? provider;
 
   final Duration autoMoveDelay;
+  final Duration diceAnimationDuration;
 
-  MatchScreenHarness({this.autoMoveDelay = Duration.zero});
+  MatchScreenHarness({
+    this.autoMoveDelay = Duration.zero,
+    this.diceAnimationDuration = Duration.zero,
+  });
 
   Future<void> setUp({
     required List<LudoPlayer> players,
@@ -160,6 +164,7 @@ class MatchScreenHarness {
       return provider = MatchGameProvider(
         service: service,
         autoMoveDelay: autoMoveDelay,
+        diceAnimationDuration: diceAnimationDuration,
       );
     });
     sl.registerSingleton<CancelMatch>(

@@ -52,6 +52,15 @@ class LudoMatchBoard extends StatefulWidget {
   /// Plays the per-square step sound during the move animation.
   final GameSoundPlayer? sounds;
 
+  /// True while something else must finish first (the dice tumbling):
+  /// taps are ignored and nothing glows.
+  final bool inputLocked;
+
+  /// Told when the board starts animating a move and when the move (and
+  /// any captured token going home) has finished, so the rest of the
+  /// screen can wait for it.
+  final ValueChanged<bool>? onAnimatingChanged;
+
   const LudoMatchBoard({
     super.key,
     required this.players,
@@ -67,6 +76,8 @@ class LudoMatchBoard extends StatefulWidget {
     required this.selectableRolls,
     required this.onAvailableRollTap,
     this.sounds,
+    this.inputLocked = false,
+    this.onAnimatingChanged,
   });
 
   /// Board frame width around the playing area, for a board of [side].
@@ -202,7 +213,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                     child: IgnorePointer(
                       child: RepaintBoundary(
                         child: MovableTokenGlow(
-                          rings: _glowRings(innerSide),
+                          rings: widget.inputLocked
+                              ? const <GlowRing>[]
+                              : _glowRings(innerSide),
                           cell: innerSide / LudoBoardGeometry.gridSize,
                           origin: Offset(frame, frame),
                         ),
@@ -381,7 +394,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   }
 
   void _handleBoardTap(Offset point) {
-    if (_animatingMove != null || _innerSide <= 0) return;
+    if (_animatingMove != null || widget.inputLocked || _innerSide <= 0) {
+      return;
+    }
 
     switch (resolveTap(point, _innerSide)) {
       case DestinationTapTarget(:final move):

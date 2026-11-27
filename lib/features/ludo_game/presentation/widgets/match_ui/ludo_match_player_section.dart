@@ -21,6 +21,10 @@ class LudoMatchPlayerSection extends StatelessWidget {
   final ValueChanged<int> onAvailableRollTap;
   final int? selectedRollSequence;
 
+  /// The roll tumbling on this card (its id restarts the tumble), with the
+  /// value it stops on and how long it takes.
+  final ({int id, int value, Duration duration})? rollingDie;
+
   const LudoMatchPlayerSection({
     super.key,
     required this.player,
@@ -32,6 +36,7 @@ class LudoMatchPlayerSection extends StatelessWidget {
     required this.height,
     required this.onAvailableRollTap,
     required this.selectedRollSequence,
+    this.rollingDie,
   });
 
   /// Smallest font on the match screen.
@@ -200,7 +205,12 @@ class LudoMatchPlayerSection extends StatelessWidget {
   Widget _buildRollRow(Color color, Color foreground) {
     return Row(
       children: <Widget>[
-        MatchDieFace(value: turnState?.lastRoll, size: chipSize),
+        AnimatedMatchDieFace(
+          value: rollingDie?.value ?? turnState?.lastRoll,
+          size: chipSize,
+          rollId: rollingDie?.id,
+          duration: rollingDie?.duration ?? Duration.zero,
+        ),
         const SizedBox(width: 6),
         Expanded(
           child: FilledButton.icon(
