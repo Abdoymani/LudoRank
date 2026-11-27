@@ -7,47 +7,52 @@ import '../features/tournaments/presentation/pages/tournament_details_page.dart'
 import 'app_routes.dart';
 import 'package:ludo_rank/features/tournaments/presentation/pages/tournaments_page.dart';
 
-final GoRouter appRouter = GoRouter(
-  initialLocation: AppRoutes.splash,
+final GoRouter appRouter = createAppRouter();
 
-  routes: [
-    GoRoute(
-      path: AppRoutes.splash,
-      name: 'splash',
-      builder: (context, state) => const SplashPage(),
-    ),
+/// The app's routes. Tests build their own router (with another
+/// [initialLocation]) so navigation state does not leak between them.
+GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) =>
+    GoRouter(
+      initialLocation: initialLocation,
 
-    GoRoute(
-      path: AppRoutes.home,
-      name: 'home',
-      builder: (context, state) => const HomePage(),
-    ),
+      routes: [
+        GoRoute(
+          path: AppRoutes.splash,
+          name: 'splash',
+          builder: (context, state) => const SplashPage(),
+        ),
 
-    GoRoute(
-      path: AppRoutes.players,
-      name: 'players',
+        GoRoute(
+          path: AppRoutes.home,
+          name: 'home',
+          builder: (context, state) => const HomePage(),
+        ),
 
-      builder: (context, state) {
-        return const PlayersPage();
-      },
-    ),
+        GoRoute(
+          path: AppRoutes.players,
+          name: 'players',
 
-    GoRoute(
-      path: AppRoutes.tournaments,
-      name: 'tournaments',
-      builder: (context, state) => const TournamentsPage(),
-    ),
+          builder: (context, state) {
+            return const PlayersPage();
+          },
+        ),
 
-    GoRoute(
-      path: '${AppRoutes.tournaments}/:id',
+        GoRoute(
+          path: AppRoutes.tournaments,
+          name: 'tournaments',
+          builder: (context, state) => const TournamentsPage(),
+        ),
 
-      name: 'tournament-details',
+        GoRoute(
+          path: '${AppRoutes.tournaments}/:id',
 
-      builder: (context, state) {
-        final id = state.pathParameters['id']!;
+          name: 'tournament-details',
 
-        return TournamentDetailsPage(tournamentId: id);
-      },
-    ),
-  ],
-);
+          builder: (context, state) {
+            final id = state.pathParameters['id']!;
+
+            return TournamentDetailsPage(tournamentId: id);
+          },
+        ),
+      ],
+    );

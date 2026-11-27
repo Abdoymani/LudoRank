@@ -57,18 +57,25 @@ import 'package:ludo_rank/features/tournaments/presentation/providers/tournament
 
 final sl = GetIt.instance;
 
-Future<void> initDependencies() async {
+/// Registers every app dependency.
+///
+/// Tests pass an in-memory [database] and turn [preloadSounds] off (there
+/// are no audio plugins in widget tests).
+Future<void> initDependencies({
+  AppDatabase? database,
+  bool preloadSounds = true,
+}) async {
   // Settings (theme, sound) and app-wide sound effects.
   final settings = await AppSettings.load();
   sl.registerSingleton<AppSettings>(settings);
   final soundController = SoundController(settings);
   sl.registerSingleton<SoundController>(soundController);
   // Warm the sound pool in the background so game sounds start on time.
-  unawaited(soundController.preload());
+  if (preloadSounds) unawaited(soundController.preload());
 
   // Database
 
-  sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
+  sl.registerLazySingleton<AppDatabase>(() => database ?? AppDatabase());
   sl.registerLazySingleton<DatabaseCheckpointer>(
     () => DatabaseCheckpointer(() => sl<AppDatabase>().checkpointWal()),
   );
