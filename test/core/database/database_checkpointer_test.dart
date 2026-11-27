@@ -53,8 +53,8 @@ void main() {
     final wal = File('${file.path}-wal');
 
     await database.customStatement(
-      "INSERT INTO players (id, name, created_at, updated_at) "
-      "VALUES ('p1', 'Ahmed', 0, 0)",
+      "INSERT INTO players (id, name, normalized_name, created_at, updated_at) "
+      "VALUES ('p1', 'Ahmed', 'ahmed', 0, 0)",
     );
     expect(wal.existsSync() && wal.lengthSync() > 0, isTrue);
 

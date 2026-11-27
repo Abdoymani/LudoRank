@@ -87,6 +87,6 @@ void main() {
     expect(await db.select(db.matches).get(), hasLength(5));
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 5);
+    expect(version.read<int>('user_version'), db.schemaVersion);
   });
 }

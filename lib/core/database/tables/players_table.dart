@@ -5,6 +5,10 @@ class Players extends Table {
 
   TextColumn get name => text().unique()();
 
+  /// The name as normalizePlayerName returns it. Unique, so two players
+  /// cannot differ only by case, hamza, tashkeel or spacing.
+  TextColumn get normalizedName => text().unique()();
+
   TextColumn get nickname => text().nullable()();
 
   TextColumn get avatar => text().nullable()();

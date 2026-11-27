@@ -30,6 +30,7 @@ Future<void> _seed(AppDatabase db) async {
           PlayersCompanion.insert(
             id: id,
             name: id,
+            normalizedName: id,
             createdAt: _now,
             updatedAt: _now,
           ),

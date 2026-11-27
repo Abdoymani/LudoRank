@@ -4,6 +4,17 @@ import 'package:ludo_rank/core/database/tables/players_table.dart';
 
 @TableIndex(name: 'idx_match_players_match', columns: {#matchId})
 @TableIndex(name: 'idx_match_players_player', columns: {#playerId})
+/// One player per seat and each player once per match (schema 6).
+@TableIndex(
+  name: 'ux_match_players_match_seat',
+  columns: {#matchId, #seat},
+  unique: true,
+)
+@TableIndex(
+  name: 'ux_match_players_match_player',
+  columns: {#matchId, #playerId},
+  unique: true,
+)
 class MatchPlayers extends Table {
   TextColumn get id => text()();
 

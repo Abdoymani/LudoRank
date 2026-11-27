@@ -27,6 +27,18 @@ class $PlayersTable extends Players with TableInfo<$PlayersTable, Player> {
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
   );
+  static const VerificationMeta _normalizedNameMeta = const VerificationMeta(
+    'normalizedName',
+  );
+  @override
+  late final GeneratedColumn<String> normalizedName = GeneratedColumn<String>(
+    'normalized_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
   static const VerificationMeta _nicknameMeta = const VerificationMeta(
     'nickname',
   );
@@ -97,6 +109,7 @@ class $PlayersTable extends Players with TableInfo<$PlayersTable, Player> {
   List<GeneratedColumn> get $columns => [
     id,
     name,
+    normalizedName,
     nickname,
     avatar,
     notes,
@@ -128,6 +141,17 @@ class $PlayersTable extends Players with TableInfo<$PlayersTable, Player> {
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('normalized_name')) {
+      context.handle(
+        _normalizedNameMeta,
+        normalizedName.isAcceptableOrUnknown(
+          data['normalized_name']!,
+          _normalizedNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedNameMeta);
     }
     if (data.containsKey('nickname')) {
       context.handle(
@@ -186,6 +210,10 @@ class $PlayersTable extends Players with TableInfo<$PlayersTable, Player> {
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      normalizedName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_name'],
+      )!,
       nickname: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}nickname'],
@@ -222,6 +250,10 @@ class $PlayersTable extends Players with TableInfo<$PlayersTable, Player> {
 class Player extends DataClass implements Insertable<Player> {
   final String id;
   final String name;
+
+  /// The name as normalizePlayerName returns it. Unique, so two players
+  /// cannot differ only by case, hamza, tashkeel or spacing.
+  final String normalizedName;
   final String? nickname;
   final String? avatar;
   final String? notes;
@@ -231,6 +263,7 @@ class Player extends DataClass implements Insertable<Player> {
   const Player({
     required this.id,
     required this.name,
+    required this.normalizedName,
     this.nickname,
     this.avatar,
     this.notes,
@@ -243,6 +276,7 @@ class Player extends DataClass implements Insertable<Player> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
+    map['normalized_name'] = Variable<String>(normalizedName);
     if (!nullToAbsent || nickname != null) {
       map['nickname'] = Variable<String>(nickname);
     }
@@ -262,6 +296,7 @@ class Player extends DataClass implements Insertable<Player> {
     return PlayersCompanion(
       id: Value(id),
       name: Value(name),
+      normalizedName: Value(normalizedName),
       nickname: nickname == null && nullToAbsent
           ? const Value.absent()
           : Value(nickname),
@@ -285,6 +320,7 @@ class Player extends DataClass implements Insertable<Player> {
     return Player(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      normalizedName: serializer.fromJson<String>(json['normalizedName']),
       nickname: serializer.fromJson<String?>(json['nickname']),
       avatar: serializer.fromJson<String?>(json['avatar']),
       notes: serializer.fromJson<String?>(json['notes']),
@@ -299,6 +335,7 @@ class Player extends DataClass implements Insertable<Player> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
+      'normalizedName': serializer.toJson<String>(normalizedName),
       'nickname': serializer.toJson<String?>(nickname),
       'avatar': serializer.toJson<String?>(avatar),
       'notes': serializer.toJson<String?>(notes),
@@ -311,6 +348,7 @@ class Player extends DataClass implements Insertable<Player> {
   Player copyWith({
     String? id,
     String? name,
+    String? normalizedName,
     Value<String?> nickname = const Value.absent(),
     Value<String?> avatar = const Value.absent(),
     Value<String?> notes = const Value.absent(),
@@ -320,6 +358,7 @@ class Player extends DataClass implements Insertable<Player> {
   }) => Player(
     id: id ?? this.id,
     name: name ?? this.name,
+    normalizedName: normalizedName ?? this.normalizedName,
     nickname: nickname.present ? nickname.value : this.nickname,
     avatar: avatar.present ? avatar.value : this.avatar,
     notes: notes.present ? notes.value : this.notes,
@@ -331,6 +370,9 @@ class Player extends DataClass implements Insertable<Player> {
     return Player(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      normalizedName: data.normalizedName.present
+          ? data.normalizedName.value
+          : this.normalizedName,
       nickname: data.nickname.present ? data.nickname.value : this.nickname,
       avatar: data.avatar.present ? data.avatar.value : this.avatar,
       notes: data.notes.present ? data.notes.value : this.notes,
@@ -345,6 +387,7 @@ class Player extends DataClass implements Insertable<Player> {
     return (StringBuffer('Player(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('normalizedName: $normalizedName, ')
           ..write('nickname: $nickname, ')
           ..write('avatar: $avatar, ')
           ..write('notes: $notes, ')
@@ -359,6 +402,7 @@ class Player extends DataClass implements Insertable<Player> {
   int get hashCode => Object.hash(
     id,
     name,
+    normalizedName,
     nickname,
     avatar,
     notes,
@@ -372,6 +416,7 @@ class Player extends DataClass implements Insertable<Player> {
       (other is Player &&
           other.id == this.id &&
           other.name == this.name &&
+          other.normalizedName == this.normalizedName &&
           other.nickname == this.nickname &&
           other.avatar == this.avatar &&
           other.notes == this.notes &&
@@ -383,6 +428,7 @@ class Player extends DataClass implements Insertable<Player> {
 class PlayersCompanion extends UpdateCompanion<Player> {
   final Value<String> id;
   final Value<String> name;
+  final Value<String> normalizedName;
   final Value<String?> nickname;
   final Value<String?> avatar;
   final Value<String?> notes;
@@ -393,6 +439,7 @@ class PlayersCompanion extends UpdateCompanion<Player> {
   const PlayersCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.normalizedName = const Value.absent(),
     this.nickname = const Value.absent(),
     this.avatar = const Value.absent(),
     this.notes = const Value.absent(),
@@ -404,6 +451,7 @@ class PlayersCompanion extends UpdateCompanion<Player> {
   PlayersCompanion.insert({
     required String id,
     required String name,
+    required String normalizedName,
     this.nickname = const Value.absent(),
     this.avatar = const Value.absent(),
     this.notes = const Value.absent(),
@@ -413,11 +461,13 @@ class PlayersCompanion extends UpdateCompanion<Player> {
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
+       normalizedName = Value(normalizedName),
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
   static Insertable<Player> custom({
     Expression<String>? id,
     Expression<String>? name,
+    Expression<String>? normalizedName,
     Expression<String>? nickname,
     Expression<String>? avatar,
     Expression<String>? notes,
@@ -429,6 +479,7 @@ class PlayersCompanion extends UpdateCompanion<Player> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (normalizedName != null) 'normalized_name': normalizedName,
       if (nickname != null) 'nickname': nickname,
       if (avatar != null) 'avatar': avatar,
       if (notes != null) 'notes': notes,
@@ -442,6 +493,7 @@ class PlayersCompanion extends UpdateCompanion<Player> {
   PlayersCompanion copyWith({
     Value<String>? id,
     Value<String>? name,
+    Value<String>? normalizedName,
     Value<String?>? nickname,
     Value<String?>? avatar,
     Value<String?>? notes,
@@ -453,6 +505,7 @@ class PlayersCompanion extends UpdateCompanion<Player> {
     return PlayersCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      normalizedName: normalizedName ?? this.normalizedName,
       nickname: nickname ?? this.nickname,
       avatar: avatar ?? this.avatar,
       notes: notes ?? this.notes,
@@ -471,6 +524,9 @@ class PlayersCompanion extends UpdateCompanion<Player> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (normalizedName.present) {
+      map['normalized_name'] = Variable<String>(normalizedName.value);
     }
     if (nickname.present) {
       map['nickname'] = Variable<String>(nickname.value);
@@ -501,6 +557,7 @@ class PlayersCompanion extends UpdateCompanion<Player> {
     return (StringBuffer('PlayersCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('normalizedName: $normalizedName, ')
           ..write('nickname: $nickname, ')
           ..write('avatar: $avatar, ')
           ..write('notes: $notes, ')
@@ -2283,6 +2340,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_match_players_player',
     'CREATE INDEX idx_match_players_player ON match_players (player_id)',
   );
+  late final Index uxMatchPlayersMatchSeat = Index(
+    'ux_match_players_match_seat',
+    'CREATE UNIQUE INDEX ux_match_players_match_seat ON match_players (match_id, seat)',
+  );
+  late final Index uxMatchPlayersMatchPlayer = Index(
+    'ux_match_players_match_player',
+    'CREATE UNIQUE INDEX ux_match_players_match_player ON match_players (match_id, player_id)',
+  );
   late final PlayerDao playerDao = PlayerDao(this as AppDatabase);
   late final TournamentDao tournamentDao = TournamentDao(this as AppDatabase);
   late final TournamentPlayerDao tournamentPlayerDao = TournamentPlayerDao(
@@ -2308,6 +2373,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     uxMatchesTournamentNumber,
     idxMatchPlayersMatch,
     idxMatchPlayersPlayer,
+    uxMatchPlayersMatchSeat,
+    uxMatchPlayersMatchPlayer,
   ];
 }
 
@@ -2315,6 +2382,7 @@ typedef $$PlayersTableCreateCompanionBuilder =
     PlayersCompanion Function({
       required String id,
       required String name,
+      required String normalizedName,
       Value<String?> nickname,
       Value<String?> avatar,
       Value<String?> notes,
@@ -2327,6 +2395,7 @@ typedef $$PlayersTableUpdateCompanionBuilder =
     PlayersCompanion Function({
       Value<String> id,
       Value<String> name,
+      Value<String> normalizedName,
       Value<String?> nickname,
       Value<String?> avatar,
       Value<String?> notes,
@@ -2396,6 +2465,11 @@ class $$PlayersTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2499,6 +2573,11 @@ class $$PlayersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get nickname => $composableBuilder(
     column: $table.nickname,
     builder: (column) => ColumnOrderings(column),
@@ -2544,6 +2623,11 @@ class $$PlayersTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get nickname =>
       $composableBuilder(column: $table.nickname, builder: (column) => column);
@@ -2648,6 +2732,7 @@ class $$PlayersTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String> normalizedName = const Value.absent(),
                 Value<String?> nickname = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
@@ -2658,6 +2743,7 @@ class $$PlayersTableTableManager
               }) => PlayersCompanion(
                 id: id,
                 name: name,
+                normalizedName: normalizedName,
                 nickname: nickname,
                 avatar: avatar,
                 notes: notes,
@@ -2670,6 +2756,7 @@ class $$PlayersTableTableManager
               ({
                 required String id,
                 required String name,
+                required String normalizedName,
                 Value<String?> nickname = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
@@ -2680,6 +2767,7 @@ class $$PlayersTableTableManager
               }) => PlayersCompanion.insert(
                 id: id,
                 name: name,
+                normalizedName: normalizedName,
                 nickname: nickname,
                 avatar: avatar,
                 notes: notes,
