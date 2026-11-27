@@ -37,6 +37,9 @@ class MatchGamePage extends StatefulWidget {
 }
 
 class _MatchGamePageState extends State<MatchGamePage> {
+  /// Largest text scale used inside the match screen.
+  static const double maxTextScale = 1.3;
+
   late final MatchGameProvider provider;
 
   @override
@@ -177,107 +180,112 @@ class _MatchGamePageState extends State<MatchGamePage> {
       value: provider,
       child: Consumer<MatchGameProvider>(
         builder: (context, gameProvider, _) {
-          return PopScope<Object?>(
-            canPop: _canPopFreely,
-            onPopInvokedWithResult: (didPop, _) {
-              if (!didPop) _handleBack();
-            },
-            child: Scaffold(
-              appBar: AppBar(
-                toolbarHeight: 48,
-                centerTitle: true,
-                title: const Text(
-                  'LudoRank',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                ),
-                leading: IconButton(
-                  onPressed: gameProvider.isLoading || _leaving
-                      ? null
-                      : _handleBack,
-                  tooltip: 'رجوع',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-                actions: <Widget>[
-                  if (gameProvider.isGameFinished && !gameProvider.isFinished)
-                    IconButton(
-                      onPressed: gameProvider.isLoading
-                          ? null
-                          : gameProvider.retryFinishPersistence,
-                      tooltip: 'إعادة حفظ النتيجة',
-                      icon: const Icon(Icons.sync),
-                    )
-                  else
-                    const SoundToggleButton(),
-                ],
-                bottom: const PreferredSize(
-                  preferredSize: Size.fromHeight(1),
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Color(0xFF51465E),
+          // A bigger system font is honoured up to 1.3x here: beyond that
+          // the cards would eat the board on a phone.
+          return MediaQuery.withClampedTextScaling(
+            maxScaleFactor: maxTextScale,
+            child: PopScope<Object?>(
+              canPop: _canPopFreely,
+              onPopInvokedWithResult: (didPop, _) {
+                if (!didPop) _handleBack();
+              },
+              child: Scaffold(
+                appBar: AppBar(
+                  toolbarHeight: 48,
+                  centerTitle: true,
+                  title: const Text(
+                    'LudoRank',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  ),
+                  leading: IconButton(
+                    onPressed: gameProvider.isLoading || _leaving
+                        ? null
+                        : _handleBack,
+                    tooltip: 'رجوع',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                  actions: <Widget>[
+                    if (gameProvider.isGameFinished && !gameProvider.isFinished)
+                      IconButton(
+                        onPressed: gameProvider.isLoading
+                            ? null
+                            : gameProvider.retryFinishPersistence,
+                        tooltip: 'إعادة حفظ النتيجة',
+                        icon: const Icon(Icons.sync),
+                      )
+                    else
+                      const SoundToggleButton(),
+                  ],
+                  bottom: const PreferredSize(
+                    preferredSize: Size.fromHeight(1),
+                    child: Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Color(0xFF51465E),
+                    ),
                   ),
                 ),
-              ),
-              body: SafeArea(
-                top: false,
-                child: Stack(
-                  children: <Widget>[
-                    _LiveMatchLayout(
-                      provider: gameProvider,
-                      onTokenTap: _onTokenTap,
-                      onMove: _executeMove,
-                    ),
-                    if (gameProvider.rollNotice != null)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Center(
-                            child: RotatedBox(
-                              quarterTurns:
-                                  _noticeFacesFarSide(
-                                    gameProvider,
-                                    gameProvider.rollNotice!,
-                                  )
-                                  ? 2
-                                  : 0,
-                              child: _RollNoticeBanner(
-                                notice: gameProvider.rollNotice!,
+                body: SafeArea(
+                  top: false,
+                  child: Stack(
+                    children: <Widget>[
+                      _LiveMatchLayout(
+                        provider: gameProvider,
+                        onTokenTap: _onTokenTap,
+                        onMove: _executeMove,
+                      ),
+                      if (gameProvider.rollNotice != null)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Center(
+                              child: RotatedBox(
+                                quarterTurns:
+                                    _noticeFacesFarSide(
+                                      gameProvider,
+                                      gameProvider.rollNotice!,
+                                    )
+                                    ? 2
+                                    : 0,
+                                child: _RollNoticeBanner(
+                                  notice: gameProvider.rollNotice!,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    if (gameProvider.error != null)
-                      Positioned(
-                        left: 10,
-                        right: 10,
-                        bottom: 8,
-                        child: _ErrorBanner(
-                          message: gameProvider.error!,
-                          onClose: gameProvider.clearError,
-                        ),
-                      ),
-                    if (gameProvider.isGameFinished)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          ignoring: gameProvider.isLoading,
-                          child: LudoGameResultOverlay(
-                            players: gameProvider.completedPlayers,
-                            playerNames: widget.playerNames,
-                            isSaved: gameProvider.isFinished,
-                            isLoading: gameProvider.isLoading,
-                            onRetry: gameProvider.retryFinishPersistence,
-                            onClose: gameProvider.isFinished
-                                ? () => Navigator.pop(context, true)
-                                : null,
-                            gameResult: gameProvider.result,
-                            matchPlayers:
-                                gameProvider.session?.matchPlayers ??
-                                const <MatchPlayer>[],
-                            gamePlayers: gameProvider.players,
+                      if (gameProvider.error != null)
+                        Positioned(
+                          left: 10,
+                          right: 10,
+                          bottom: 8,
+                          child: _ErrorBanner(
+                            message: gameProvider.error!,
+                            onClose: gameProvider.clearError,
                           ),
                         ),
-                      ),
-                  ],
+                      if (gameProvider.isGameFinished)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            ignoring: gameProvider.isLoading,
+                            child: LudoGameResultOverlay(
+                              players: gameProvider.completedPlayers,
+                              playerNames: widget.playerNames,
+                              isSaved: gameProvider.isFinished,
+                              isLoading: gameProvider.isLoading,
+                              onRetry: gameProvider.retryFinishPersistence,
+                              onClose: gameProvider.isFinished
+                                  ? () => Navigator.pop(context, true)
+                                  : null,
+                              gameResult: gameProvider.result,
+                              matchPlayers:
+                                  gameProvider.session?.matchPlayers ??
+                                  const <MatchPlayer>[],
+                              gamePlayers: gameProvider.players,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -327,8 +335,15 @@ class _LiveMatchLayout extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final shortScreen = constraints.maxHeight < 630;
-        final activeCardHeight = shortScreen ? 110.0 : 126.0;
-        final inactiveCardHeight = shortScreen ? 34.0 : 42.0;
+        // Card heights follow the (clamped) text size instead of fixed
+        // numbers, so a bigger font never pushes text out of a card.
+        final textScaler = MediaQuery.textScalerOf(context);
+        final activeCardHeight = LudoMatchPlayerSection.activeHeightFor(
+          textScaler,
+        );
+        final inactiveCardHeight = LudoMatchPlayerSection.inactiveHeightFor(
+          textScaler,
+        );
         final rowGap = shortScreen ? 4.0 : 6.0;
         final sidePadding = constraints.maxWidth < 360 ? 8.0 : 12.0;
 
