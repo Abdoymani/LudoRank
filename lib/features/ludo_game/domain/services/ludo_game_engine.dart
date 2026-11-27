@@ -69,9 +69,11 @@ class LudoGameEngine {
   /// to grant the capture bonus roll.
   bool _lastMoveWasCapture = false;
 
+  /// [random] is for tests (a seeded Random gives repeatable dice).
+  /// The app uses the platform's cryptographic generator.
   LudoGameEngine({required LudoGameState initialState, Random? random})
     : _state = initialState,
-      _random = random ?? Random();
+      _random = random ?? Random.secure();
 
   // ============================================================
   // GETTERS
