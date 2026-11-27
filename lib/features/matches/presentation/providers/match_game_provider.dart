@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
+import 'package:ludo_rank/core/database/database_checkpointer.dart';
 import 'package:ludo_rank/features/matches/presentation/providers/game_sound_events.dart';
 
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
@@ -60,11 +61,17 @@ class MatchGameProvider extends ChangeNotifier {
   LudoGameState? _movesCacheState;
   List<MoveOption> _movesCache = const <MoveOption>[];
 
+  /// Waits for this match's in-flight save before a WAL checkpoint.
+  final DatabaseCheckpointer? checkpointer;
+
   MatchGameProvider({
     required this.service,
     this.sounds,
     this.autoMoveDelay = Duration.zero,
-  });
+    this.checkpointer,
+  }) {
+    checkpointer?.addPendingSaveWaiter(waitForPendingSave);
+  }
 
   bool get isDisposed => _disposed;
 
@@ -104,6 +111,7 @@ class MatchGameProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    checkpointer?.removePendingSaveWaiter(waitForPendingSave);
     _rollNoticeTimer?.cancel();
     for (final timer in _soundTimers) {
       timer.cancel();

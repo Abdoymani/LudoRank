@@ -8,6 +8,7 @@ import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 
 import 'package:ludo_rank/core/database/database.dart';
+import 'package:ludo_rank/core/database/database_checkpointer.dart';
 import 'package:ludo_rank/features/home/data/data_sources/local/home_dao.dart';
 import 'package:ludo_rank/features/home/data/repositories/home_repository_impl.dart';
 import 'package:ludo_rank/features/home/domain/repositories/home_repository.dart';
@@ -68,6 +69,9 @@ Future<void> initDependencies() async {
   // Database
 
   sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
+  sl.registerLazySingleton<DatabaseCheckpointer>(
+    () => DatabaseCheckpointer(() => sl<AppDatabase>().checkpointWal()),
+  );
 
   // UseCase
   sl.registerLazySingleton<GetDashboard>(
@@ -184,6 +188,7 @@ Future<void> initDependencies() async {
       service: sl<MatchGameService>(),
       sounds: sl<SoundController>(),
       autoMoveDelay: const Duration(milliseconds: 450),
+      checkpointer: sl<DatabaseCheckpointer>(),
     ),
   );
 

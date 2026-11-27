@@ -39,6 +39,12 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 5;
 
+  /// Writes every committed change from the WAL file into the main file
+  /// and empties the WAL (see DatabaseCheckpointer).
+  Future<void> checkpointWal() async {
+    await customSelect('PRAGMA wal_checkpoint(TRUNCATE)').get();
+  }
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) async {
