@@ -6,6 +6,7 @@ import '../features/home/presentation/pages/home_page.dart';
 import '../features/tournaments/presentation/pages/tournament_details_page.dart';
 import 'app_routes.dart';
 import 'package:ludo_rank/features/tournaments/presentation/pages/tournaments_page.dart';
+import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 
 final GoRouter appRouter = createAppRouter();
 
@@ -40,7 +41,11 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) =>
         GoRoute(
           path: AppRoutes.tournaments,
           name: 'tournaments',
-          builder: (context, state) => const TournamentsPage(),
+          builder: (context, state) => TournamentsPage(
+            initialFilter: TournamentFilter.fromName(
+              state.uri.queryParameters['status'],
+            ),
+          ),
         ),
 
         GoRoute(

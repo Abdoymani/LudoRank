@@ -1,10 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:ludo_rank/app/app_routes.dart';
 import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 
+/// Shows [CreateTournamentDialog] and, once the tournament is saved, opens
+/// its details page. Returns after that page is closed (or right away when
+/// the dialog is dismissed), so callers can refresh what they show.
+Future<void> createTournamentAndOpen(BuildContext context) async {
+  final id = await showDialog<String>(
+    context: context,
+    builder: (_) => const CreateTournamentDialog(),
+  );
+
+  if (id == null || !context.mounted) return;
+
+  await context.push('${AppRoutes.tournaments}/$id');
+}
+
+/// Asks for a name and saves a new draft tournament. Pops with the new
+/// tournament's id, or null when cancelled.
 class CreateTournamentDialog extends StatefulWidget {
   const CreateTournamentDialog({super.key});
 
@@ -18,6 +36,8 @@ class _CreateTournamentDialogState extends State<CreateTournamentDialog> {
   final _nameController = TextEditingController();
 
   int _rounds = 5;
+
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -37,11 +57,22 @@ class _CreateTournamentDialogState extends State<CreateTournamentDialog> {
       updatedAt: DateTime.now(),
     );
 
-    await context.read<TournamentProvider>().addTournament(tournament);
+    setState(() => _saving = true);
+    final provider = context.read<TournamentProvider>();
+    final saved = await provider.addTournament(tournament);
+    if (!mounted) return;
+    setState(() => _saving = false);
 
-    if (mounted) {
-      Navigator.pop(context);
+    if (saved) {
+      Navigator.pop(context, tournament.id);
+      return;
     }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('تعذر إنشاء البطولة، حاول مرة أخرى')),
+      );
   }
 
   @override
@@ -105,7 +136,10 @@ class _CreateTournamentDialogState extends State<CreateTournamentDialog> {
           child: const Text("إلغاء"),
         ),
 
-        FilledButton(onPressed: _save, child: const Text("إنشاء")),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: const Text("إنشاء"),
+        ),
       ],
     );
   }

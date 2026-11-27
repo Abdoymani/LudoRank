@@ -19,6 +19,29 @@ class TournamentDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Players and matches per tournament, keyed by tournament id, in one
+  /// query (the list shows both on every card).
+  Future<Map<String, ({int players, int matches})>>
+  getTournamentCounts() async {
+    final rows = await customSelect(
+      'SELECT t.id AS id, '
+      '(SELECT COUNT(*) FROM tournament_players tp '
+      'WHERE tp.tournament_id = t.id) AS players, '
+      '(SELECT COUNT(*) FROM matches m '
+      'WHERE m.tournament_id = t.id) AS matches '
+      'FROM tournaments t',
+      readsFrom: {tournaments},
+    ).get();
+
+    return {
+      for (final row in rows)
+        row.read<String>('id'): (
+          players: row.read<int>('players'),
+          matches: row.read<int>('matches'),
+        ),
+    };
+  }
+
   /// بطولة واحدة
   Future<Tournament?> getTournamentById(String id) {
     return (select(
