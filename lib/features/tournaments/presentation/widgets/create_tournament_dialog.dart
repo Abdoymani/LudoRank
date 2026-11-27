@@ -58,6 +58,8 @@ class _CreateTournamentDialogState extends State<CreateTournamentDialog> {
           children: [
             TextFormField(
               controller: _nameController,
+              autofocus: true,
+              maxLength: Tournament.maxNameLength,
               decoration: const InputDecoration(labelText: "اسم البطولة"),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {

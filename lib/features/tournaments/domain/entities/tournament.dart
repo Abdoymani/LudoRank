@@ -14,6 +14,9 @@ enum TournamentStatus {
 }
 
 class Tournament extends Equatable {
+  /// Input limit for the tournament name field.
+  static const int maxNameLength = 30;
+
   final String id;
 
   final String name;
