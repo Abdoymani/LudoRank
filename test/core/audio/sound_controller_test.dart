@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ludo_rank/app/theme_controller.dart';
+import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
 import 'package:ludo_rank/core/settings/app_settings.dart';
 
@@ -34,6 +35,11 @@ void main() {
 
       final restarted = SoundController(await AppSettings.load());
       expect(restarted.enabled, isFalse);
+    });
+
+    test('preload loads every step player, one player for other sounds', () {
+      expect(SoundController.preloadedPlayersFor(GameSound.step), 3);
+      expect(SoundController.preloadedPlayersFor(GameSound.dice), 1);
     });
 
     test('the effects context never takes audio focus from other apps', () {

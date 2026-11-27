@@ -58,13 +58,21 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
     unawaited(_play(sound));
   }
 
+  /// How many players [preload] loads for [sound]. Steps play in quick
+  /// succession and rotate through the whole pool during the first move,
+  /// so all of their players are loaded up front.
+  @visibleForTesting
+  static int preloadedPlayersFor(GameSound sound) {
+    return sound == GameSound.step ? _playersPerSound : 1;
+  }
+
   /// Loads every sound once (asset copy + native decode), so the first roll
   /// and the first token steps play on time instead of after a load.
   Future<void> preload() async {
     for (final sound in GameSound.values) {
       if (_disposed) return;
       try {
-        await _playerAt(sound, 0);
+        await _playerAt(sound, preloadedPlayersFor(sound) - 1);
       } catch (error) {
         debugPrint('Sound ${sound.name} preload failed: $error');
       }
