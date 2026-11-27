@@ -9,7 +9,8 @@ import 'package:ludo_rank/features/tournaments/domain/repositories/tournament_re
 /// running        -> finished   (organizer ends the tournament)
 /// draft / ready / running -> cancelled
 ///
-/// finished and cancelled are final.
+/// finished and cancelled are final. unknown (a stored value this app
+/// version cannot read) allows nothing.
 abstract final class TournamentStatusTransitions {
   static const Map<TournamentStatus, Set<TournamentStatus>> _allowed = {
     TournamentStatus.draft: {
@@ -28,6 +29,7 @@ abstract final class TournamentStatusTransitions {
     },
     TournamentStatus.finished: {},
     TournamentStatus.cancelled: {},
+    TournamentStatus.unknown: {},
   };
 
   static bool canTransition(TournamentStatus from, TournamentStatus to) {
@@ -38,7 +40,8 @@ abstract final class TournamentStatusTransitions {
   /// tournament is still open.
   static bool isOpen(TournamentStatus status) {
     return status != TournamentStatus.finished &&
-        status != TournamentStatus.cancelled;
+        status != TournamentStatus.cancelled &&
+        status != TournamentStatus.unknown;
   }
 }
 
@@ -77,11 +80,13 @@ class TournamentLifecycleService {
     final tournament = await _load(tournamentId);
 
     if (!TournamentStatusTransitions.isOpen(tournament.status)) {
-      throw StateError(
-        tournament.status == TournamentStatus.finished
-            ? 'البطولة منتهية، لا يمكن إضافة مباريات جديدة.'
-            : 'البطولة ملغاة، لا يمكن إضافة مباريات جديدة.',
-      );
+      throw StateError(switch (tournament.status) {
+        TournamentStatus.finished =>
+          'البطولة منتهية، لا يمكن إضافة مباريات جديدة.',
+        TournamentStatus.cancelled =>
+          'البطولة ملغاة، لا يمكن إضافة مباريات جديدة.',
+        _ => 'حالة البطولة غير معروفة، لا يمكن إضافة مباريات جديدة.',
+      });
     }
   }
 

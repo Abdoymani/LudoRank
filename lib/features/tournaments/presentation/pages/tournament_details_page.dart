@@ -189,6 +189,8 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
         return 'مكتملة';
       case TournamentStatus.cancelled:
         return 'ملغاة';
+      case TournamentStatus.unknown:
+        return 'غير معروفة';
     }
   }
 
@@ -204,6 +206,8 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
         return Colors.amber.shade700;
       case TournamentStatus.cancelled:
         return colors.error;
+      case TournamentStatus.unknown:
+        return colors.outline;
     }
   }
 
