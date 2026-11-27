@@ -57,8 +57,18 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
   }
 
   /// يحذف المباراة ولاعبيها معًا (المفاتيح الأجنبية مفعلة).
+  ///
+  /// A finished match is part of the standings and is never deleted on
+  /// its own (deleting the whole tournament still removes it). This also
+  /// keeps match numbers unique: max + 1 can only reuse the number of a
+  /// deleted match that never counted.
   Future<int> deleteMatch(String id) {
     return transaction(() async {
+      final match = await getMatchById(id);
+      if (match != null && match.status == 'finished') {
+        throw StateError('لا يمكن حذف مباراة منتهية.');
+      }
+
       await customStatement('DELETE FROM match_players WHERE match_id = ?', [
         id,
       ]);
