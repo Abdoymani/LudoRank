@@ -367,6 +367,7 @@ class _ResultLayer extends StatelessWidget {
           gameResult: provider.result,
           matchPlayers: provider.session?.matchPlayers ?? const <MatchPlayer>[],
           gamePlayers: provider.players,
+          sounds: provider.sounds,
         ),
       ),
     );

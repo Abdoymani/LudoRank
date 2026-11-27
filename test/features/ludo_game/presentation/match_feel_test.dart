@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
+import 'package:ludo_rank/features/ludo_game/presentation/widgets/ludo_game_result_overlay.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_board_art.dart';
+import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_player_section.dart';
 
 import 'match_screen_harness.dart';
@@ -118,5 +121,59 @@ void main() {
       isNotNull,
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the result fades and scales in, then ranks appear one by '
+      'one with a reveal sound each', (tester) async {
+    final played = RecordingSounds();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LudoGameResultOverlay(
+          players: const <MatchPlayer>[],
+          isSaved: false,
+          isLoading: false,
+          onRetry: () {},
+          onClose: null,
+          playerNames: const {'a': 'A', 'b': 'B', 'c': 'C'},
+          gameResult: const GameResult(
+            players: [
+              GamePlayerResult(playerId: 'b', rank: 1, finished: true),
+              GamePlayerResult(playerId: 'a', rank: 2, finished: true),
+              GamePlayerResult(playerId: 'c', rank: 3, finished: false),
+            ],
+            isFinished: true,
+          ),
+          sounds: played,
+        ),
+      ),
+    );
+
+    double opacityOf(String name) {
+      final fade = find.ancestor(
+        of: find.text(name),
+        matching: find.byType(FadeTransition),
+      );
+      // The nearest FadeTransition is the row's own reveal.
+      return tester.widget<FadeTransition>(fade.first).opacity.value;
+    }
+
+    final card = find.ancestor(
+      of: find.byType(Card),
+      matching: find.byType(ScaleTransition),
+    );
+    expect(tester.widget<ScaleTransition>(card.first).scale.value, .86);
+    expect(played.sounds, isEmpty);
+
+    // Mid-way: first place shown, third not yet.
+    await tester.pump(const Duration(milliseconds: 520));
+    expect(opacityOf('B'), greaterThan(.5));
+    expect(opacityOf('C'), lessThan(.1));
+    expect(played.sounds.length, inInclusiveRange(1, 2));
+
+    await tester.pumpAndSettle();
+    expect(opacityOf('B'), 1);
+    expect(opacityOf('C'), 1);
+    expect(tester.widget<ScaleTransition>(card.first).scale.value, 1);
+    expect(played.sounds, List.filled(3, GameSound.reveal));
   });
 }
