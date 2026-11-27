@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:ludo_rank/features/splash/presentation/pages/splash_page.dart';
 import 'package:ludo_rank/features/players/presentation/pages/players_page.dart';
 
+import '../features/home/presentation/pages/all_matches_page.dart';
 import '../features/home/presentation/pages/home_page.dart';
 import '../features/tournaments/presentation/pages/tournament_details_page.dart';
 import 'app_routes.dart';
@@ -46,6 +47,12 @@ GoRouter createAppRouter({String initialLocation = AppRoutes.splash}) =>
               state.uri.queryParameters['status'],
             ),
           ),
+        ),
+
+        GoRoute(
+          path: AppRoutes.matches,
+          name: 'matches',
+          builder: (context, state) => const AllMatchesPage(),
         ),
 
         GoRoute(
