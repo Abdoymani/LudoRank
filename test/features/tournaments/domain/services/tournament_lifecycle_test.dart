@@ -188,6 +188,68 @@ void main() {
       expect((await create()).matchNumber, 1);
     });
 
+    test('a player who is not in the tournament is refused '
+        '(audit probe P4)', () async {
+      final tPlayers = TournamentPlayerRepositoryImpl(
+        database.tournamentPlayerDao,
+      );
+      await tPlayers.addPlayer(
+        TournamentPlayer(
+          id: 't1-p1',
+          tournamentId: 't1',
+          playerId: 'p1',
+          joinedAt: _now,
+        ),
+      );
+      final checked = CreateMatch(
+        matchRepository: matches,
+        matchPlayerRepository: MatchPlayerRepositoryImpl(
+          database.matchPlayerDao,
+        ),
+        tournamentLifecycle: lifecycle,
+        tournamentPlayerRepository: tPlayers,
+        transactionRunner: DriftTransactionRunner(database),
+      );
+      final match = Match(
+        id: 'outsider',
+        tournamentId: 't1',
+        playersCount: 2,
+        status: MatchStatus.pending,
+        createdAt: _now,
+        updatedAt: _now,
+      );
+      List<MatchPlayer> seats() => [
+        for (var seat = 1; seat <= 2; seat++)
+          MatchPlayer(
+            id: 'outsider-$seat',
+            matchId: match.id,
+            playerId: 'p$seat',
+            seat: seat,
+            points: 0,
+            finished: false,
+          ),
+      ];
+
+      // p2 never joined t1.
+      await expectLater(
+        checked(match: match, players: seats()),
+        throwsArgumentError,
+      );
+      expect(await matches.getById('outsider'), isNull);
+      expect(await tournamentStatus(), TournamentStatus.draft);
+
+      await tPlayers.addPlayer(
+        TournamentPlayer(
+          id: 't1-p2',
+          tournamentId: 't1',
+          playerId: 'p2',
+          joinedAt: _now,
+        ),
+      );
+      await checked(match: match, players: seats());
+      expect(await matches.getById('outsider'), isNotNull);
+    });
+
     test('matches get numbers 1, 2, 3', () async {
       final a = await create();
       final b = await create();
