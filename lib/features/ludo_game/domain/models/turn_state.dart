@@ -66,9 +66,6 @@ class TurnState extends Equatable {
 
   bool get hasAvailableRolls => availableRolls.isNotEmpty;
 
-  /// وصلنا لثالث 6 داخل نفس الدور.
-  bool get reachedSixLimit => sixRollCount >= 3;
-
   int? get lastRoll {
     if (rolls.isEmpty) {
       return null;

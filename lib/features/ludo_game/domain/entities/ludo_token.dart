@@ -2,7 +2,9 @@ import 'package:equatable/equatable.dart';
 
 import 'position.dart';
 
-enum LudoTokenState { initial, normal, safe, safeInPair, finished }
+/// `safe` = on a safe cell or in the home lane. (Old snapshots may still
+/// say `safeInPair`; the JSON codec reads it as safe/normal by cell.)
+enum LudoTokenState { initial, normal, safe, finished }
 
 class LudoToken extends Equatable {
   final String id;
@@ -51,8 +53,7 @@ class LudoToken extends Equatable {
 
   bool get isInitial => state == LudoTokenState.initial;
 
-  bool get isSafe =>
-      state == LudoTokenState.safe || state == LudoTokenState.safeInPair;
+  bool get isSafe => state == LudoTokenState.safe;
 
   LudoToken copyWith({
     String? id,
