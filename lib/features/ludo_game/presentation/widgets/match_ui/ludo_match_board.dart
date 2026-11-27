@@ -78,7 +78,12 @@ class LudoMatchBoard extends StatefulWidget {
     this.sounds,
     this.inputLocked = false,
     this.onAnimatingChanged,
+    this.captureReturnDuration = const Duration(milliseconds: 360),
   });
+
+  /// How long a captured token takes to slide back to its base, after the
+  /// capturing token has landed.
+  final Duration captureReturnDuration;
 
   /// Board frame width around the playing area, for a board of [side].
   static double frameFor(double side) => (side * .017).clamp(3.0, 5.0);
@@ -118,7 +123,7 @@ class TokenTapTarget extends BoardTapTarget {
 }
 
 class _LudoMatchBoardState extends State<LudoMatchBoard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   /// Time for one square. Each square is its own eased hop, so the piece
   /// lands on every cell (with its step sound) instead of gliding past.
   static const Duration stepDuration = Duration(milliseconds: 210);
@@ -138,6 +143,20 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   /// Side of the playing area at the last layout, for the tap hit test.
   double _innerSide = 0;
 
+  /// Tokens captured by the move that just landed, sliding back home.
+  late final AnimationController _returnController;
+  List<_ReturningToken> _returning = const <_ReturningToken>[];
+
+  /// What the board last reported through onAnimatingChanged.
+  bool _busy = false;
+
+  /// The board before the animated move was handed to the provider, and
+  /// the token that moved. The provider applies the move and the board is
+  /// rebuilt with the new players a frame later; comparing the two shows
+  /// which tokens the move captured.
+  List<LudoPlayer>? _playersBeforeCommit;
+  String? _committingTokenId;
+
   @override
   void initState() {
     super.initState();
@@ -149,6 +168,11 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
     _controller.addListener(_onAnimationTick);
 
+    _returnController = AnimationController(
+      vsync: this,
+      duration: widget.captureReturnDuration,
+    )..addStatusListener(_onReturnStatus);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _tryStartAutomaticMove();
     });
@@ -157,6 +181,14 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   @override
   void didUpdateWidget(covariant LudoMatchBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // The animated move was just applied: tokens it knocked back to their
+    // base slide home now that the capturing token has landed.
+    final before = _playersBeforeCommit;
+    if (before != null && !identical(before, widget.players)) {
+      _playersBeforeCommit = null;
+      _startCaptureReturns(before, widget.players, _committingTokenId);
+    }
 
     // A new pending move (or none) re-arms the automatic start. The
     // provider can replace one pending move by the next in a single
@@ -190,6 +222,8 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
         final innerSide = LudoMatchBoard.innerSideFor(side);
         _innerSide = innerSide;
         final animating = _animatingMove != null;
+        // Nothing can be tapped until a move and its capture are done.
+        final settling = animating || _returning.isNotEmpty;
 
         return Center(
           child: SizedBox.square(
@@ -201,14 +235,17 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                   child: RepaintBoundary(
                     child: LudoMatchBoardArt(
                       players: widget.players,
-                      hiddenTokenIds: <String>{?_animatingTokenId},
+                      hiddenTokenIds: <String>{
+                        ?_animatingTokenId,
+                        for (final token in _returning) token.tokenId,
+                      },
                     ),
                   ),
                 ),
 
                 // Pulsing rings around every token that can move, in its
                 // own layer: the board art never repaints for the pulse.
-                if (!animating)
+                if (!settling)
                   Positioned.fill(
                     child: IgnorePointer(
                       child: RepaintBoundary(
@@ -241,7 +278,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                   child: GestureDetector(
                     key: const ValueKey<String>('board-input'),
                     behavior: HitTestBehavior.opaque,
-                    onTapUp: animating
+                    onTapUp: settling
                         ? null
                         : (details) => _handleBoardTap(
                             details.localPosition - Offset(frame, frame),
@@ -261,7 +298,23 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                     ),
                   ),
 
-                if (!animating &&
+                if (_returning.isNotEmpty)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: _ReturningTokensPainter(
+                            animation: _returnController,
+                            tokens: _returning,
+                            innerSide: innerSide,
+                            origin: Offset(frame, frame),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (!settling &&
                     widget.selectableRolls.isNotEmpty &&
                     widget.selectedTokenId != null)
                   ..._buildSelectedTokenDice(
@@ -280,7 +333,80 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   @override
   void dispose() {
     _controller.dispose();
+    _returnController.dispose();
     super.dispose();
+  }
+
+  void _setBusy(bool value) {
+    if (_busy == value) return;
+    _busy = value;
+    widget.onAnimatingChanged?.call(value);
+  }
+
+  // ============================================================
+  // CAPTURED TOKENS GOING HOME
+  // ============================================================
+
+  /// Finds the opponent tokens that [before] -> [after] sent back to their
+  /// base (on the board before, at home now) and slides them home.
+  void _startCaptureReturns(
+    List<LudoPlayer> before,
+    List<LudoPlayer> after,
+    String? movedTokenId,
+  ) {
+    String? moverId;
+    for (final player in after) {
+      if (player.tokens.any((token) => token.id == movedTokenId)) {
+        moverId = player.playerId;
+      }
+    }
+
+    final previous = <String, LudoToken>{
+      for (final player in before)
+        for (final token in player.tokens) token.id: token,
+    };
+    // Board-independent coordinates (side 1), scaled when painted.
+    final oldCenters = LudoTokenLayout.centers(before, 1);
+    final newCenters = LudoTokenLayout.centers(after, 1);
+    final returning = <_ReturningToken>[];
+
+    for (final player in after) {
+      // The mover's own tokens reset when it finishes; that is no capture.
+      if (player.playerId == moverId) continue;
+      for (final token in player.tokens) {
+        final old = previous[token.id];
+        if (old == null || old.isInitial || old.isFinished) continue;
+        if (!token.isInitial) continue;
+        returning.add(
+          _ReturningToken(
+            tokenId: token.id,
+            color: player.color,
+            from: oldCenters[token.id]!,
+            to: newCenters[token.id]!,
+          ),
+        );
+      }
+    }
+
+    if (returning.isEmpty) return;
+
+    _returning = returning;
+    _returnController
+      ..duration = widget.captureReturnDuration
+      ..forward(from: 0);
+    widget.sounds?.play(GameSound.tokenReturn);
+  }
+
+  void _onReturnStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !mounted) return;
+
+    setState(() => _returning = const <_ReturningToken>[]);
+    _returnController.reset();
+    if (_animatingMove == null && _committingTokenId == null) _setBusy(false);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _tryStartAutomaticMove();
+    });
   }
 
   // ============================================================
@@ -394,7 +520,10 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   }
 
   void _handleBoardTap(Offset point) {
-    if (_animatingMove != null || widget.inputLocked || _innerSide <= 0) {
+    if (_animatingMove != null ||
+        _returning.isNotEmpty ||
+        widget.inputLocked ||
+        _innerSide <= 0) {
       return;
     }
 
@@ -413,7 +542,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   // ============================================================
 
   void _tryStartAutomaticMove() {
-    if (_animatingMove != null || !mounted) return;
+    if (_animatingMove != null || _returning.isNotEmpty || !mounted) return;
 
     // الحركة الوحيدة التي اكتشفها الـ Provider بعد رمي النرد.
     final pending = widget.pendingAutoMove;
@@ -449,7 +578,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   }
 
   void _startMoveAnimation(MoveOption move) {
-    if (_animatingMove != null) return;
+    if (_animatingMove != null || _returning.isNotEmpty) return;
 
     // لا نحرّك أي قطعة بناءً على اختيار قديم لم يعد قانونيًا.
     if (!widget.availableMoves.any((candidate) => _sameMove(candidate, move))) {
@@ -514,6 +643,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
         : stepDuration * hops;
 
     // تشغيل الحركة من البداية.
+    _setBusy(true);
     _controller.forward(from: 0);
   }
 
@@ -535,6 +665,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       return;
     }
 
+    _playersBeforeCommit = widget.players;
+    _committingTokenId = _animatingTokenId;
+
     try {
       // انتظر اعتماد الحركة داخل الـ Provider ومحرك اللعبة.
       await widget.onMoveTap(move);
@@ -551,11 +684,17 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
         _controller.reset();
 
-        // The provider may already offer the next automatic move (the
-        // rest of the turn has one legal move); start it now that this
-        // animation is cleared.
+        // After the next frame the board has been rebuilt with the move
+        // applied (and any capture return started): unless a captured
+        // token is on its way home, input is free again. The provider may
+        // already offer the next automatic move (the rest of the turn has
+        // one legal move); start it now that this animation is cleared.
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _tryStartAutomaticMove();
+          if (!mounted) return;
+          _playersBeforeCommit = null;
+          _committingTokenId = null;
+          if (_returning.isEmpty && _animatingMove == null) _setBusy(false);
+          _tryStartAutomaticMove();
         });
       }
 
@@ -1017,6 +1156,61 @@ class _GlowPainter extends CustomPainter {
   bool shouldRepaint(covariant _GlowPainter oldDelegate) {
     return !listEquals(oldDelegate.rings, rings) ||
         oldDelegate.cell != cell ||
+        oldDelegate.origin != origin;
+  }
+}
+
+/// A captured token on its way back to its base, in board coordinates of
+/// a board of side 1.
+@immutable
+class _ReturningToken {
+  final String tokenId;
+  final LudoPlayerColor color;
+  final Offset from;
+  final Offset to;
+
+  const _ReturningToken({
+    required this.tokenId,
+    required this.color,
+    required this.from,
+    required this.to,
+  });
+}
+
+/// Slides captured tokens home in a small arc.
+class _ReturningTokensPainter extends CustomPainter {
+  final Animation<double> animation;
+  final List<_ReturningToken> tokens;
+  final double innerSide;
+  final Offset origin;
+
+  _ReturningTokensPainter({
+    required this.animation,
+    required this.tokens,
+    required this.innerSide,
+    required this.origin,
+  }) : super(repaint: animation);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = Curves.easeInOutCubic.transform(animation.value);
+    final cell = innerSide / LudoBoardGeometry.gridSize;
+    final arc = math.sin(math.pi * t) * cell * .9;
+
+    for (final token in tokens) {
+      final at = origin + Offset.lerp(token.from, token.to, t)! * innerSide;
+      canvas.save();
+      canvas.translate(at.dx, at.dy - arc);
+      canvas.scale(1 + .12 * math.sin(math.pi * t));
+      paintMatchToken(canvas, Offset.zero, cell, token.color);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ReturningTokensPainter oldDelegate) {
+    return !identical(oldDelegate.tokens, tokens) ||
+        oldDelegate.innerSide != innerSide ||
         oldDelegate.origin != origin;
   }
 }
