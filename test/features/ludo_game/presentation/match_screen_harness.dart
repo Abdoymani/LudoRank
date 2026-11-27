@@ -180,7 +180,9 @@ class MatchScreenHarness {
     tester.view.devicePixelRatio = 2.75;
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     // The movable-token glow pulses forever while a move is to be chosen,
-    // which pumpAndSettle would wait on; tests opt in with [pulse].
+    // which pumpAndSettle would wait on; tests opt in with [pulse]. With
+    // "remove animations" on, Flutter also runs every animation 20x
+    // faster, so timing tests pass pulse: true.
     if (!pulse) {
       tester.platformDispatcher.accessibilityFeaturesTestValue =
           const FakeAccessibilityFeatures(disableAnimations: true);

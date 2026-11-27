@@ -197,6 +197,28 @@ class MatchGameProvider extends ChangeNotifier {
       return const <Position, List<MoveOption>>{};
     }
 
+    // Same engine state and same selection: the same map, so the board's
+    // selector sees no change.
+    final moves = availableMoves;
+    if (identical(_destinationsCacheMoves, moves) &&
+        _destinationsCacheTokenId == tokenId) {
+      return _destinationsCache;
+    }
+    _destinationsCacheMoves = moves;
+    _destinationsCacheTokenId = tokenId;
+    return _destinationsCache = _computeDestinations(session, tokenId);
+  }
+
+  List<MoveOption>? _destinationsCacheMoves;
+  String? _destinationsCacheTokenId;
+  Map<Position, List<MoveOption>> _destinationsCache =
+      const <Position, List<MoveOption>>{};
+
+  Map<Position, List<MoveOption>> _computeDestinations(
+    MatchGameSession session,
+    String tokenId,
+  ) {
+
     final result = <Position, List<MoveOption>>{};
 
     for (final move in availableMoves) {
