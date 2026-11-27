@@ -859,6 +859,13 @@ class FakeMatchPlayerRepository implements MatchPlayerRepository {
   }
 
   @override
+  Future<List<MatchPlayer>> getFinishedTournamentMatchPlayers(
+    String tournamentId,
+  ) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> addPlayer(MatchPlayer player) async {
     _players[player.id] = player;
   }

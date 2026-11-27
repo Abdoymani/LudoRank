@@ -1,7 +1,6 @@
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
 import 'package:ludo_rank/features/matches/domain/repositories/match_repository.dart';
-import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'package:ludo_rank/features/match_players/domain/repositories/match_player_repository.dart';
 import 'package:ludo_rank/features/tournament_players/domain/entities/tournament_player.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_standings_calculator.dart';
@@ -37,15 +36,9 @@ class TournamentStandingsService {
   }) async {
     final matches = await matchRepository.getTournamentMatches(tournamentId);
 
-    final results = <MatchPlayer>[];
-
-    for (final match in matches) {
-      if (match.status != MatchStatus.finished) continue;
-
-      final players = await matchPlayerRepository.getMatchPlayers(match.id);
-
-      results.addAll(players);
-    }
+    // One query for all finished matches (not one per match).
+    final results = await matchPlayerRepository
+        .getFinishedTournamentMatchPlayers(tournamentId);
 
     final standings = calculator.calculate(
       participantIds: participants.map((player) => player.playerId).toList(),

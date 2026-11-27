@@ -16,6 +16,14 @@ class MatchPlayerRepositoryImpl implements MatchPlayerRepository {
   }
 
   @override
+  Future<List<MatchPlayer>> getFinishedTournamentMatchPlayers(
+    String tournamentId,
+  ) async {
+    final rows = await dao.getFinishedTournamentMatchPlayers(tournamentId);
+    return rows.map(MatchPlayerModel.fromDrift).toList();
+  }
+
+  @override
   Future<MatchPlayer?> getMatchPlayer(String id) async {
     final row = await dao.getMatchPlayer(id);
     if (row == null) return null;

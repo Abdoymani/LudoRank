@@ -18,6 +18,32 @@ class MatchPlayerDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// The player rows of every finished match in a tournament, in one
+  /// query (used by the standings instead of one query per match).
+  Future<List<MatchPlayer>> getFinishedTournamentMatchPlayers(
+    String tournamentId,
+  ) {
+    final finishedMatches = attachedDatabase.matches;
+    final query =
+        select(matchPlayers).join([
+            innerJoin(
+              finishedMatches,
+              finishedMatches.id.equalsExp(matchPlayers.matchId),
+              useColumns: false,
+            ),
+          ])
+          ..where(
+            finishedMatches.tournamentId.equals(tournamentId) &
+                finishedMatches.status.equals('finished'),
+          )
+          ..orderBy([
+            OrderingTerm.asc(finishedMatches.matchNumber),
+            OrderingTerm.asc(matchPlayers.seat),
+          ]);
+
+    return query.map((row) => row.readTable(matchPlayers)).get();
+  }
+
   /// لاعب واحد داخل المباراة
   Future<MatchPlayer?> getMatchPlayer(String id) {
     return (select(
