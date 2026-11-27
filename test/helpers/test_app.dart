@@ -81,7 +81,9 @@ class TestApp {
       Tournament(
         id: id,
         name: name,
-        status: status,
+        // Players can only join an open tournament; the real status is
+        // set afterwards.
+        status: TournamentStatus.draft,
         rounds: 1,
         createdAt: createdAt,
         updatedAt: createdAt,
@@ -98,6 +100,7 @@ class TestApp {
           ),
       ]);
     }
+    await setRawTournamentStatus(id, status.name);
     return id;
   }
 
