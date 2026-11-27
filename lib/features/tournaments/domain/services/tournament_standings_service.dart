@@ -33,6 +33,7 @@ class TournamentStandingsService {
   Future<TournamentStandingsSnapshot> load({
     required String tournamentId,
     required List<TournamentPlayer> participants,
+    Map<String, String> playerNames = const {},
   }) async {
     final matches = await matchRepository.getTournamentMatches(tournamentId);
 
@@ -50,6 +51,7 @@ class TournamentStandingsService {
       participantIds: participants.map((player) => player.playerId).toList(),
       matches: matches,
       matchPlayers: results,
+      playerNames: playerNames,
     );
 
     return TournamentStandingsSnapshot(

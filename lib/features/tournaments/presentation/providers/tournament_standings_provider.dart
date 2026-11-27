@@ -20,6 +20,7 @@ class TournamentStandingsProvider extends ChangeNotifier {
   Future<void> load({
     required String tournamentId,
     required List<TournamentPlayer> participants,
+    Map<String, String> playerNames = const {},
   }) async {
     _isLoading = true;
     _error = null;
@@ -30,6 +31,7 @@ class TournamentStandingsProvider extends ChangeNotifier {
       _snapshot = await service.load(
         tournamentId: tournamentId,
         participants: participants,
+        playerNames: playerNames,
       );
     } catch (e) {
       _error = e.toString();

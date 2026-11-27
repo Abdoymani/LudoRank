@@ -27,6 +27,7 @@ class TournamentStandingsCalculator {
     required List<String> participantIds,
     required List<Match> matches,
     required List<MatchPlayer> matchPlayers,
+    Map<String, String> playerNames = const {},
   }) {
     final participantSet = participantIds.toSet();
 
@@ -79,7 +80,25 @@ class TournamentStandingsCalculator {
         final pointsComparison = points[b]!.compareTo(points[a]!);
         if (pointsComparison != 0) return pointsComparison;
 
-        // ترتيب ثابت عند تساوي النقاط، من غير كسر التعادل في المركز.
+        // Equal points share the position (ranking is by points only);
+        // inside it: more first places, then the better best rank
+        // (no rank yet comes last), then the name, then the id.
+        final winsComparison = wins[b]!.compareTo(wins[a]!);
+        if (winsComparison != 0) return winsComparison;
+
+        final bestA = bestRanks[a];
+        final bestB = bestRanks[b];
+        if (bestA != bestB) {
+          if (bestA == null) return 1;
+          if (bestB == null) return -1;
+          return bestA.compareTo(bestB);
+        }
+
+        final nameComparison = (playerNames[a] ?? a).toLowerCase().compareTo(
+          (playerNames[b] ?? b).toLowerCase(),
+        );
+        if (nameComparison != 0) return nameComparison;
+
         return a.compareTo(b);
       });
 

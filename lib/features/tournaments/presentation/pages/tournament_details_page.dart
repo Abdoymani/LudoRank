@@ -63,6 +63,9 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
     await standingsProvider.load(
       tournamentId: widget.tournamentId,
       participants: List.of(tournamentPlayerProvider.players),
+      playerNames: {
+        for (final player in playerProvider.players) player.id: player.name,
+      },
     );
   }
 
