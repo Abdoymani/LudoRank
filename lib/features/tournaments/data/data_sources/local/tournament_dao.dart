@@ -10,9 +10,13 @@ class TournamentDao extends DatabaseAccessor<AppDatabase>
     with _$TournamentDaoMixin {
   TournamentDao(super.db);
 
-  /// جميع البطولات
+  /// جميع البطولات، الأحدث أولًا.
   Future<List<Tournament>> getAllTournaments() {
-    return select(tournaments).get();
+    return (select(tournaments)..orderBy([
+          (tbl) => OrderingTerm.desc(tbl.createdAt),
+          (tbl) => OrderingTerm.desc(tbl.rowId),
+        ]))
+        .get();
   }
 
   /// بطولة واحدة
