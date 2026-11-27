@@ -36,8 +36,6 @@ import 'package:ludo_rank/features/tournaments/data/repositories/tournament_repo
 import 'package:ludo_rank/features/tournaments/data/data_sources/local/tournament_dao.dart';
 
 import 'package:ludo_rank/features/tournaments/domain/repositories/tournament_repository.dart';
-import 'package:ludo_rank/features/tournaments/domain/services/tournament_validator.dart';
-import 'package:ludo_rank/features/tournaments/domain/Use-cases/continue_tournament.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 
 // Tournament Players.
@@ -75,8 +73,6 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<GetDashboard>(
     () => GetDashboard(sl<HomeRepository>()),
   );
-
-  sl.registerLazySingleton(() => ContinueTournament(sl(), sl(), sl()));
 
   // DAO
 
@@ -190,9 +186,6 @@ Future<void> initDependencies() async {
       autoMoveDelay: const Duration(milliseconds: 450),
     ),
   );
-
-  // Validator
-  sl.registerLazySingleton<TournamentValidator>(() => TournamentValidator());
 
   //standings_service
 

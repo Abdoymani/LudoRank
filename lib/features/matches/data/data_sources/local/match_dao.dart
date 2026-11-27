@@ -44,12 +44,6 @@ class MatchDao extends DatabaseAccessor<AppDatabase> with _$MatchDaoMixin {
     return (row.read(maxNumber) ?? 0) + 1;
   }
 
-  Future<void> insertMatches(List<MatchesCompanion> companions) async {
-    await batch((batch) {
-      batch.insertAll(matches, companions);
-    });
-  }
-
   Future<bool> updateMatch(MatchesCompanion match) async {
     if (!match.id.present) {
       throw ArgumentError('Match ID is required to update a match.');
