@@ -8,6 +8,7 @@ import 'package:ludo_rank/features/ludo_game/domain/models/move_option.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/geometry/ludo_board_geometry.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_board_art.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
+import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_seat_layout.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_ui_colors.dart';
 import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
 import 'package:ludo_rank/features/ludo_game/domain/services/ludo_move_tracer.dart';
@@ -663,6 +664,10 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       return geometry.cellCenter(position, innerSide);
     }
 
+    // A top-row player sits across the table: their chips are turned to
+    // face them and sit on their side of the token.
+    final facesFarSide = MatchSeatLayout.facesFarSide(owner.color);
+
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -670,10 +675,12 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
         return Positioned(
           left: frame + center.dx - totalWidth / 2,
-          top: frame + center.dy - dieSize * 1.65,
+          top: facesFarSide
+              ? frame + center.dy + dieSize * .65
+              : frame + center.dy - dieSize * 1.65,
           width: totalWidth,
           height: dieSize,
-          child: child!,
+          child: RotatedBox(quarterTurns: facesFarSide ? 2 : 0, child: child),
         );
       },
       child: Row(

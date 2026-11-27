@@ -14,6 +14,7 @@ import 'package:ludo_rank/features/match_players/domain/entities/match_player.da
 import 'dart:async';
 
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
+import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_seat_layout.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 
 class MatchGamePage extends StatefulWidget {
@@ -160,6 +161,16 @@ class _MatchGamePageState extends State<MatchGamePage> {
     }
   }
 
+  /// A notice about a top-row player's roll faces that player.
+  bool _noticeFacesFarSide(MatchGameProvider gameProvider, RollNotice notice) {
+    for (final player in gameProvider.players) {
+      if (player.playerId == notice.playerId) {
+        return MatchSeatLayout.facesFarSide(player.color);
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<MatchGameProvider>.value(
@@ -220,8 +231,17 @@ class _MatchGamePageState extends State<MatchGamePage> {
                       Positioned.fill(
                         child: IgnorePointer(
                           child: Center(
-                            child: _RollNoticeBanner(
-                              notice: gameProvider.rollNotice!,
+                            child: RotatedBox(
+                              quarterTurns:
+                                  _noticeFacesFarSide(
+                                    gameProvider,
+                                    gameProvider.rollNotice!,
+                                  )
+                                  ? 2
+                                  : 0,
+                              child: _RollNoticeBanner(
+                                notice: gameProvider.rollNotice!,
+                              ),
                             ),
                           ),
                         ),
@@ -331,6 +351,7 @@ class _LiveMatchLayout extends StatelessWidget {
                       child: _buildHomeSideRow(
                         left: green,
                         right: yellow,
+                        facesFarSide: true,
                         currentPlayer: currentPlayer,
                         activeCardHeight: activeCardHeight,
                         inactiveCardHeight: inactiveCardHeight,
@@ -384,6 +405,7 @@ class _LiveMatchLayout extends StatelessWidget {
                       child: _buildHomeSideRow(
                         left: red,
                         right: blue,
+                        facesFarSide: false,
                         currentPlayer: currentPlayer,
                         activeCardHeight: activeCardHeight,
                         inactiveCardHeight: inactiveCardHeight,
@@ -402,9 +424,13 @@ class _LiveMatchLayout extends StatelessWidget {
   /// The two slots follow the physical homes and never reorder the colors.
   /// LTR slots preserve green/yellow and red/blue board-side positioning;
   /// each player's own contents stay RTL Arabic.
+  ///
+  /// [facesFarSide] is the row above the board: its cards are turned 180°
+  /// so those players read them from their side ([MatchSeatLayout]).
   Widget _buildHomeSideRow({
     required LudoPlayer? left,
     required LudoPlayer? right,
+    required bool facesFarSide,
     required LudoPlayer currentPlayer,
     required double activeCardHeight,
     required double inactiveCardHeight,
@@ -419,6 +445,7 @@ class _LiveMatchLayout extends StatelessWidget {
               currentPlayer,
               activeCardHeight,
               inactiveCardHeight,
+              facesFarSide,
             ),
           ),
           const SizedBox(width: 7),
@@ -428,6 +455,7 @@ class _LiveMatchLayout extends StatelessWidget {
               currentPlayer,
               activeCardHeight,
               inactiveCardHeight,
+              facesFarSide,
             ),
           ),
         ],
@@ -440,32 +468,37 @@ class _LiveMatchLayout extends StatelessWidget {
     LudoPlayer currentPlayer,
     double activeCardHeight,
     double inactiveCardHeight,
+    bool facesFarSide,
   ) {
     if (player == null) return const SizedBox.shrink();
 
     final isCurrent = player.playerId == currentPlayer.playerId;
 
+    // A card that grows or shrinks with the turn stays against the board.
     return Align(
-      alignment: Alignment.center,
+      alignment: facesFarSide ? Alignment.bottomCenter : Alignment.topCenter,
       child: SizedBox(
         width: double.infinity,
         height: isCurrent ? activeCardHeight : inactiveCardHeight,
-        child: Directionality(
-          textDirection: TextDirection.rtl,
-          child: LudoMatchPlayerSection(
-            player: player,
-            isCurrent: isCurrent,
-            turnState: provider.turnState,
-            availableRolls: isCurrent
-                ? provider.availableRolls
-                : provider.availableRolls.clear(),
-            canRoll: isCurrent && provider.canRollDice,
-            onRoll: () {
-              unawaited(provider.rollDice());
-            },
-            height: isCurrent ? activeCardHeight : inactiveCardHeight,
-            onAvailableRollTap: provider.handleAvailableRollTap,
-            selectedRollSequence: provider.selectedRollSequence,
+        child: RotatedBox(
+          quarterTurns: facesFarSide ? 2 : 0,
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: LudoMatchPlayerSection(
+              player: player,
+              isCurrent: isCurrent,
+              turnState: provider.turnState,
+              availableRolls: isCurrent
+                  ? provider.availableRolls
+                  : provider.availableRolls.clear(),
+              canRoll: isCurrent && provider.canRollDice,
+              onRoll: () {
+                unawaited(provider.rollDice());
+              },
+              height: isCurrent ? activeCardHeight : inactiveCardHeight,
+              onAvailableRollTap: provider.handleAvailableRollTap,
+              selectedRollSequence: provider.selectedRollSequence,
+            ),
           ),
         ),
       ),
