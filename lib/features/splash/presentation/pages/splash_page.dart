@@ -6,9 +6,27 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:ludo_rank/app/app_routes.dart';
+import 'package:ludo_rank/core/database/database.dart';
+import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 
 class SplashPage extends StatefulWidget {
-  const SplashPage({super.key});
+  /// Work the splash waits for before opening home. Defaults to opening
+  /// the database (which runs any schema upgrade), so home's first query
+  /// does not pay for it.
+  final Future<void> Function() warmUp;
+
+  /// Shortest time the splash stays, so it does not just flash.
+  final Duration minimumDuration;
+
+  const SplashPage({
+    super.key,
+    this.warmUp = openDatabase,
+    this.minimumDuration = const Duration(milliseconds: 600),
+  });
+
+  static Future<void> openDatabase() async {
+    await sl<AppDatabase>().customSelect('SELECT 1').get();
+  }
 
   @override
   State<SplashPage> createState() => _SplashPageState();
@@ -20,7 +38,6 @@ class _SplashPageState extends State<SplashPage>
   static const Color gold = Color(0xFFD9B45F);
   static const Color frameGold = Color(0xFFAD805F);
 
-  Timer? _navigationTimer;
   late final AnimationController _logoAnimationController;
   late final Animation<double> _logoFadeAnimation;
 
@@ -40,16 +57,31 @@ class _SplashPageState extends State<SplashPage>
 
     _logoAnimationController.forward();
 
-    _navigationTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        context.go(AppRoutes.home);
-      }
-    });
+    unawaited(_openHomeWhenReady());
+  }
+
+  Future<void> _openHomeWhenReady() async {
+    await Future.wait([
+      _warmUp(),
+      Future<void>.delayed(widget.minimumDuration),
+    ]);
+
+    if (mounted) {
+      context.go(AppRoutes.home);
+    }
+  }
+
+  Future<void> _warmUp() async {
+    try {
+      await widget.warmUp();
+    } catch (error) {
+      // Home shows its own error and retry if the database is unusable.
+      debugPrint('Splash warm-up failed: $error');
+    }
   }
 
   @override
   void dispose() {
-    _navigationTimer?.cancel();
     _logoAnimationController.dispose();
     super.dispose();
   }
@@ -77,6 +109,8 @@ class _SplashPageState extends State<SplashPage>
                 constraints.maxWidth * 0.88,
                 350,
               );
+
+              final pixelRatio = MediaQuery.devicePixelRatioOf(context);
 
               return SingleChildScrollView(
                 child: ConstrainedBox(
@@ -115,6 +149,12 @@ class _SplashPageState extends State<SplashPage>
                             child: Image.asset(
                               'assets/images/branding/ludorank_logo.png',
                               fit: BoxFit.cover,
+                              // The asset is 512px; decode no larger than
+                              // what is shown.
+                              cacheWidth: math.min(
+                                512,
+                                (gameLogoSize * pixelRatio).round(),
+                              ),
                             ),
                           ),
                         ),
