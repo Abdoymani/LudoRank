@@ -61,6 +61,21 @@ class TestApp {
     );
   }
 
+  /// Pumps a single [page] with the app's providers (for pages that are
+  /// not routes, or need constructor arguments).
+  Future<void> pumpPage(WidgetTester tester, Widget page) {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+
+    return tester.pumpWidget(
+      MultiProvider(
+        providers: AppProviders.providers,
+        child: MaterialApp(home: page),
+      ),
+    );
+  }
+
   Future<String> addPlayer(String name) async {
     final id = _nextId('p');
     final now = DateTime(2026, 1, 1);

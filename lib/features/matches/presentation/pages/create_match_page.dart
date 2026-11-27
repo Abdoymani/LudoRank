@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -7,6 +9,9 @@ import 'package:ludo_rank/features/matches/domain/entities/match.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/create_match.dart';
+import 'package:ludo_rank/features/matches/domain/services/seat_draw.dart';
+import 'package:ludo_rank/features/matches/presentation/seat_colors.dart';
+import 'package:ludo_rank/features/matches/presentation/widgets/seat_order_dialog.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/pages/match_game_page.dart';
 import 'package:ludo_rank/features/tournament_players/presentation/providers/tournament_player_provider.dart';
 import 'package:ludo_rank/features/players/presentation/providers/player_provider.dart';
@@ -15,7 +20,11 @@ import 'package:ludo_rank/shared/widgets/app_scaffold.dart';
 class CreateMatchPage extends StatefulWidget {
   final String tournamentId;
 
-  const CreateMatchPage({super.key, required this.tournamentId});
+  /// Source for the seat draw. Defaults to `Random.secure()`; tests pass a
+  /// seeded one.
+  final Random? random;
+
+  const CreateMatchPage({super.key, required this.tournamentId, this.random});
 
   @override
   State<CreateMatchPage> createState() => _CreateMatchPageState();
@@ -35,6 +44,12 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
 
   bool _isCreating = false;
 
+  /// Seat draw (on by default): seats are dealt at random when the match
+  /// is created. Off: seats follow the order the players were picked in.
+  bool _drawSeats = true;
+
+  late final Random _random = widget.random ?? Random.secure();
+
   @override
   void initState() {
     super.initState();
@@ -51,25 +66,6 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
       // نمسح الاختيارات القديمة حتى لا تصبح غير صالحة.
       _selectedPlayerIds.clear();
     });
-  }
-
-  Color _getSeatColor(int seat, int playersCount) {
-    if (playersCount == 2) {
-      return seat == 1 ? Colors.green : Colors.blue;
-    }
-
-    switch (seat) {
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.yellow.shade700;
-      case 3:
-        return Colors.blue;
-      case 4:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
   }
 
   void _togglePlayer(String playerId) {
@@ -102,6 +98,20 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
       return;
     }
 
+    final picked = _selectedPlayerIds.toList();
+    final selectedPlayers = await showDialog<List<String>>(
+      context: context,
+      builder: (_) => SeatOrderDialog(
+        initialOrder: _drawSeats ? drawSeats(picked, _random) : picked,
+        playerName: playerProvider.getPlayerName,
+        redraw: _drawSeats ? () => drawSeats(picked, _random) : null,
+      ),
+    );
+
+    if (selectedPlayers == null || !mounted) {
+      return;
+    }
+
     setState(() {
       _isCreating = true;
     });
@@ -117,8 +127,6 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
         createdAt: now,
         updatedAt: now,
       );
-
-      final selectedPlayers = _selectedPlayerIds.toList();
 
       await playerProvider.loadPlayers();
 
@@ -248,6 +256,45 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
                   ],
                 ),
 
+                const SizedBox(height: 20),
+
+                const Text(
+                  'ترتيب المقاعد',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 12),
+
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: true,
+                      icon: Icon(Icons.casino_outlined),
+                      label: Text('قرعة'),
+                    ),
+                    ButtonSegment(
+                      value: false,
+                      icon: Icon(Icons.format_list_numbered),
+                      label: Text('ترتيب يدوي'),
+                    ),
+                  ],
+                  selected: {_drawSeats},
+                  onSelectionChanged: (selection) {
+                    setState(() => _drawSeats = selection.single);
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  _drawSeats
+                      ? 'المقاعد هتتوزع بالقرعة لما تدوس إنشاء. '
+                            'المقعد 1 (الأخضر) بيبدأ الأول.'
+                      : 'المقاعد بترتيب اختيارك. '
+                            'المقعد 1 (الأخضر) بيبدأ الأول.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+
                 const SizedBox(height: 24),
 
                 if (_playersCount == null)
@@ -278,12 +325,16 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
 
                     final seat = selected ? _getSeat(playerId) : 0;
 
-                    final seatColor = selected
-                        ? _getSeatColor(seat, _playersCount!)
-                        : Theme.of(context).colorScheme.surfaceContainerHighest;
+                    final showSeat = selected && !_drawSeats;
+
+                    final tileColor = !selected
+                        ? Theme.of(context).colorScheme.surfaceContainerHighest
+                        : showSeat
+                        ? seatColor(seat, _playersCount!)
+                        : Theme.of(context).colorScheme.primary;
 
                     final backgroundColor = selected
-                        ? seatColor.withValues(alpha: 0.16)
+                        ? tileColor.withValues(alpha: 0.16)
                         : Theme.of(context).colorScheme.surface;
 
                     return Card(
@@ -293,7 +344,7 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
                           color: selected
-                              ? seatColor
+                              ? tileColor
                               : Theme.of(context).colorScheme.outlineVariant,
                           width: selected ? 1.5 : 0.7,
                         ),
@@ -306,22 +357,24 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
                             : (_) {
                                 _togglePlayer(playerId);
                               },
-                        activeColor: selected ? seatColor : null,
-                        secondary: selected
+                        activeColor: selected ? tileColor : null,
+                        secondary: showSeat
                             ? CircleAvatar(
-                                backgroundColor: seatColor,
+                                backgroundColor: tileColor,
                                 child: Text(
                                   '$seat',
                                   style: TextStyle(
-                                    color: seatColor.computeLuminance() > 0.5
-                                        ? Colors.black87
-                                        : Colors.white,
+                                    color: onSeatColor(tileColor),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               )
-                            : const CircleAvatar(
-                                child: Icon(Icons.person_outline),
+                            : CircleAvatar(
+                                child: Icon(
+                                  selected
+                                      ? Icons.casino_outlined
+                                      : Icons.person_outline,
+                                ),
                               ),
                         title: Text(
                           playerProvider.getPlayerName(playerId),
@@ -332,9 +385,13 @@ class _CreateMatchPageState extends State<CreateMatchPage> {
                           ),
                         ),
                         subtitle: Text(
-                          selected ? 'المقعد: $seat' : 'لم يتم اختيار المقعد',
+                          !selected
+                              ? 'لم يتم اختيار المقعد'
+                              : showSeat
+                              ? 'المقعد: $seat'
+                              : 'المقعد بالقرعة',
                           style: TextStyle(
-                            color: selected ? seatColor : null,
+                            color: selected ? tileColor : null,
                             fontWeight: selected
                                 ? FontWeight.w600
                                 : FontWeight.normal,
@@ -396,12 +453,21 @@ class _PlayersCountButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final padding = const EdgeInsets.symmetric(vertical: 16);
+    final label = Text('$count لاعبين');
+
+    if (selected) {
+      return FilledButton(
+        onPressed: onTap,
+        style: FilledButton.styleFrom(padding: padding),
+        child: label,
+      );
+    }
+
     return OutlinedButton(
       onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-      ),
-      child: Text('$count لاعبين'),
+      style: OutlinedButton.styleFrom(padding: padding),
+      child: label,
     );
   }
 }
