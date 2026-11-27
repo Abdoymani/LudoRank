@@ -9,6 +9,8 @@ import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecy
 
 import 'package:ludo_rank/core/database/database.dart';
 import 'package:ludo_rank/core/database/database_checkpointer.dart';
+import 'package:ludo_rank/features/backup/data/data_export_service.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:ludo_rank/features/home/data/data_sources/local/home_dao.dart';
 import 'package:ludo_rank/features/home/data/repositories/home_repository_impl.dart';
 import 'package:ludo_rank/features/home/domain/repositories/home_repository.dart';
@@ -71,6 +73,13 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
   sl.registerLazySingleton<DatabaseCheckpointer>(
     () => DatabaseCheckpointer(() => sl<AppDatabase>().checkpointWal()),
+  );
+  sl.registerLazySingleton<DataExportService>(
+    () => DataExportService(
+      database: sl<AppDatabase>(),
+      waitForPendingSaves: sl<DatabaseCheckpointer>().waitForPendingSaves,
+      outputDirectory: getTemporaryDirectory,
+    ),
   );
 
   // UseCase

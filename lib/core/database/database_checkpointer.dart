@@ -22,12 +22,18 @@ class DatabaseCheckpointer {
     _pendingSaveWaiters.remove(waiter);
   }
 
+  /// Completes once every open match has finished writing its board
+  /// (also used before exporting the data).
+  Future<void> waitForPendingSaves() async {
+    for (final waiter in List.of(_pendingSaveWaiters)) {
+      await waiter();
+    }
+  }
+
   /// Never throws: a failed checkpoint only means SQLite does it later.
   Future<void> checkpoint() async {
     try {
-      for (final waiter in List.of(_pendingSaveWaiters)) {
-        await waiter();
-      }
+      await waitForPendingSaves();
       await _checkpoint();
     } catch (e) {
       debugPrint('WAL checkpoint skipped: $e');
