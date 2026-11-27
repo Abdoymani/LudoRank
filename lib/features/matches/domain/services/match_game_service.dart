@@ -8,6 +8,7 @@ import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
 import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_engine.dart';
+import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_state_normalizer.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'package:ludo_rank/features/match_players/domain/repositories/match_player_repository.dart';
 
@@ -152,11 +153,15 @@ class MatchGameService {
     final matchPlayers = await matchPlayerRepository.getMatchPlayers(matchId);
 
     // 4. Load the saved engine state.
-    final savedState = await gameStateRepository.loadGameState(matchId);
+    final loadedState = await gameStateRepository.loadGameState(matchId);
 
-    if (savedState == null) {
+    if (loadedState == null) {
       throw StateError('لا توجد Snapshot محفوظة للمباراة $matchId.');
     }
+
+    // Derived fields (safe/normal, homeEntryPending, token ids) are
+    // recomputed so an older snapshot never locks the match.
+    final savedState = LudoGameStateNormalizer.normalize(loadedState);
 
     // 5. Validate consistency between Match, MatchPlayers and Snapshot.
     if (savedState.isFinished) {

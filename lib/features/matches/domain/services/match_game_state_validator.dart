@@ -1,4 +1,6 @@
 import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
+import 'package:ludo_rank/features/ludo_game/domain/constants/safe_cells.dart';
+import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
@@ -225,6 +227,40 @@ class MatchGameStateValidator {
         _validateTokenPosition(player: player, token: token, path: path);
       }
     }
+
+    _validatePlainCellOccupancy(state);
+  }
+
+  /// On a plain main-loop cell (not safe, not a home lane) the rules allow
+  /// one colour only (landing on a single enemy captures it, two enemies
+  /// block) and at most two tokens (an own pair blocks a third).
+  void _validatePlainCellOccupancy(LudoGameState state) {
+    final owners = <Position, Set<String>>{};
+    final counts = <Position, int>{};
+
+    for (final player in state.players) {
+      final path = LudoPaths.forColor(player.color);
+
+      for (final token in player.tokens) {
+        if (token.isInitial || token.isFinished) continue;
+        if (SafeCells.contains(token.position)) continue;
+        if (path.homePath.contains(token.position)) continue;
+
+        owners
+            .putIfAbsent(token.position, () => <String>{})
+            .add(player.playerId);
+        counts[token.position] = (counts[token.position] ?? 0) + 1;
+      }
+    }
+
+    owners.forEach((position, playerIds) {
+      if (playerIds.length > 1) {
+        _fail('أكثر من لون على خانة عادية واحدة ($position).');
+      }
+      if (counts[position]! > 2) {
+        _fail('أكثر من قطعتين من نفس اللون على خانة عادية ($position).');
+      }
+    });
   }
 
   void _validateTokenPosition({
@@ -362,6 +398,14 @@ class MatchGameStateValidator {
 
     if (turn.phase == TurnPhase.playing && turn.availableRolls.isEmpty) {
       _fail('مرحلة playing تتطلب وجود رمية متاحة واحدة على الأقل.');
+    }
+
+    // A six always earns another roll, so the engine only enters playing
+    // on a non-six. Playing right after a six would skip that roll.
+    if (turn.phase == TurnPhase.playing &&
+        turn.rolls.isNotEmpty &&
+        turn.rolls.last.isSix) {
+      _fail('مرحلة playing بعد رمية 6 بدون رمية إضافية.');
     }
 
     // rolling may legitimately contain available rolls after a capture bonus.

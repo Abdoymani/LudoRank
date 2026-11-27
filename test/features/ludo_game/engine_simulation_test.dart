@@ -11,6 +11,7 @@ import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state_json_
 import 'package:ludo_rank/features/ludo_game/domain/models/move_option.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/turn_state.dart';
 import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_engine.dart';
+import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_state_normalizer.dart';
 import 'package:ludo_rank/features/ludo_game/domain/services/ludo_move_tracer.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
@@ -20,7 +21,8 @@ import 'package:ludo_rank/features/matches/domain/services/match_game_state_vali
 /// محاكاة عشوائية لمباريات كاملة بتتأكد إن قواعد اللعبة ما بتتكسرش
 /// في أي لحظة. لو اختبار هنا وقع، اطبع الـ seed وأعد المباراة دي بالظبط.
 void main() {
-  const gamesCount = 600;
+  // Fixed seeds, 1,000+ games: the validator must never reject a real state.
+  const gamesCount = 1000;
 
   test('random full games keep every rule invariant', () {
     for (var seed = 0; seed < gamesCount; seed++) {
@@ -139,6 +141,13 @@ void _playOneGame(int seed) {
     );
     expect(restored, engine.state, reason: 'seed $seed codec round-trip');
 
+    // Loading normalizes derived fields; a real state must stay the same.
+    expect(
+      LudoGameStateNormalizer.normalize(engine.state),
+      engine.state,
+      reason: 'seed $seed normalize changed a real state',
+    );
+
     if (!engine.isFinished) {
       // نفس اللي بيحصل قبل كل حفظ في التطبيق.
       const MatchGameStateValidator().validate(
@@ -148,6 +157,13 @@ void _playOneGame(int seed) {
       );
     }
   }
+
+  // The final snapshot saved right before the result.
+  const MatchGameStateValidator().validateFinished(
+    match: match,
+    matchPlayers: matchPlayers,
+    state: engine.state,
+  );
 
   final ranks = engine.getResult().players.map((p) => p.rank).toList()..sort();
   expect(ranks, [for (var i = 1; i <= playersCount; i++) i]);

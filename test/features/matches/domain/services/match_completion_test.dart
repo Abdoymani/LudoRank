@@ -4,6 +4,9 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo_rank/core/database/database.dart' as db;
 import 'package:ludo_rank/core/transactions/transaction_runner.dart';
+import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/dice_roll.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/turn_state.dart';
 import 'package:ludo_rank/features/match_players/data/repositories/match_player_repository_impl.dart';
@@ -231,6 +234,56 @@ void main() {
     final rows = await matchPlayers.getMatchPlayers('m1');
     expect(rows.map((e) => e.points), [0, 0, 0]);
     expect(await database.matchDao.getGameStateJson('m1'), isNotNull);
+  });
+
+  group('resume of an older snapshot', () {
+    test('derived fields are repaired instead of locking the match', () async {
+      final session = await service.startMatch(
+        matchId: 'm1',
+        playerNames: names,
+      );
+      final first = session.state.players.first;
+      final tokens = [...first.tokens];
+      tokens[0] = tokens[0].copyWith(
+        id: 'old-id',
+        state: LudoTokenState.normal,
+        homeEntryPending: true,
+      );
+      final old = session.state.copyWith(
+        players: [
+          first.copyWith(tokens: tokens),
+          ...session.state.players.skip(1),
+        ],
+      );
+      await gameStates.saveGameState(matchId: 'm1', state: old);
+
+      final resumed = await service.resumeMatch(matchId: 'm1');
+      final token = resumed.state.players.first.tokens.first;
+      expect(token.state, LudoTokenState.safe);
+      expect(token.id, '${first.playerId}-token-0');
+      expect(token.homeEntryPending, isFalse);
+    });
+
+    test('a real contradiction is still refused', () async {
+      final session = await service.startMatch(
+        matchId: 'm1',
+        playerNames: names,
+      );
+      final broken = session.state.copyWith(
+        turnState: TurnState(
+          playerId: session.state.turnState.playerId,
+          rolls: const [DiceRoll(value: 6, sequence: 1)],
+          availableRolls: const AvailableRolls(
+            rolls: [DiceRoll(value: 6, sequence: 1)],
+          ),
+          sixRollCount: 1,
+          phase: TurnPhase.playing,
+        ),
+      );
+      await gameStates.saveGameState(matchId: 'm1', state: broken);
+
+      await expectLater(service.resumeMatch(matchId: 'm1'), throwsStateError);
+    });
   });
 
   group('validateFinished', () {
