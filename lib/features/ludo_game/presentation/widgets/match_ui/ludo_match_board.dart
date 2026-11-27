@@ -1,28 +1,34 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import 'package:ludo_rank/core/audio/game_sound.dart';
+import 'package:ludo_rank/core/audio/sound_controller.dart';
+import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/move_option.dart';
+import 'package:ludo_rank/features/ludo_game/domain/services/ludo_move_tracer.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/geometry/ludo_board_geometry.dart';
+import 'package:ludo_rank/features/ludo_game/presentation/geometry/ludo_token_layout.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_board_art.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_seat_layout.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_ui_colors.dart';
-import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
-import 'package:ludo_rank/features/ludo_game/domain/services/ludo_move_tracer.dart';
-
-import 'dart:async';
-import 'package:ludo_rank/core/audio/game_sound.dart';
-import 'package:ludo_rank/core/audio/sound_controller.dart';
-
-import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
 
 /// Live interactive wrapper around the visual board.
 ///
 /// The board handles presentation and input only.
 /// Legal moves and move execution remain controlled by the game logic.
+///
+/// Input is one hit test for the whole board ([resolveTap]) instead of a
+/// small gesture area per token, so a finger never has to land on a 20dp
+/// token: a tap picks, in this order, a dice chip next to the selected
+/// token (its own widgets, drawn on top), a destination of the selected
+/// token, then the nearest token of the current player that can move.
 class LudoMatchBoard extends StatefulWidget {
   final List<LudoPlayer> players;
   final String? currentPlayerId;
@@ -45,9 +51,6 @@ class LudoMatchBoard extends StatefulWidget {
   /// Plays the per-square step sound during the move animation.
   final GameSoundPlayer? sounds;
 
-  /// Called when a specific legal move is selected.
-  //final ValueChanged<MoveOption> onMoveTap;
-
   const LudoMatchBoard({
     super.key,
     required this.players,
@@ -65,8 +68,41 @@ class LudoMatchBoard extends StatefulWidget {
     this.sounds,
   });
 
+  /// Board frame width around the playing area, for a board of [side].
+  static double frameFor(double side) => (side * .017).clamp(3.0, 5.0);
+
+  /// Side of the playing area (the 15×15 grid) inside the frame. Matches
+  /// the board art, which paints the grid inside a [frameFor] padding.
+  static double innerSideFor(double side) => side - frameFor(side) * 2;
+
+  /// A tap within this distance of a movable token's centre selects it:
+  /// at least 24dp (a 48dp target) however small the cells are.
+  static double tokenHitRadius(double cell) => math.max(cell * .8, 24.0);
+
+  /// Side of the square around a destination cell that accepts the tap:
+  /// always more than one full cell.
+  static double destinationHitSide(double cell) => cell * 1.4;
+
+  /// Size of one dice chip next to the selected token.
+  static const double boardDieSize = 40.0;
+
   @override
   State<LudoMatchBoard> createState() => _LudoMatchBoardState();
+}
+
+/// What a tap on the board resolved to.
+sealed class BoardTapTarget {
+  const BoardTapTarget();
+}
+
+class DestinationTapTarget extends BoardTapTarget {
+  final MoveOption move;
+  const DestinationTapTarget(this.move);
+}
+
+class TokenTapTarget extends BoardTapTarget {
+  final LudoToken token;
+  const TokenTapTarget(this.token);
 }
 
 class _LudoMatchBoardState extends State<LudoMatchBoard>
@@ -86,6 +122,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
   bool _startingAutoMove = false;
   bool _completingMove = false;
   int _lastSoundStep = 0;
+
+  /// Side of the playing area at the last layout, for the tap hit test.
+  double _innerSide = 0;
 
   @override
   void initState() {
@@ -135,8 +174,10 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
           return const SizedBox.shrink();
         }
 
-        final frame = (side * .017).clamp(3.0, 5.0).toDouble();
-        final innerSide = side - frame * 1.1;
+        final frame = LudoMatchBoard.frameFor(side);
+        final innerSide = LudoMatchBoard.innerSideFor(side);
+        _innerSide = innerSide;
+        final animating = _animatingMove != null;
 
         return Center(
           child: SizedBox.square(
@@ -148,42 +189,57 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
                   child: RepaintBoundary(
                     child: LudoMatchBoardArt(
                       players: widget.players,
-                      hiddenTokenId: _animatingTokenId,
+                      hiddenTokenIds: <String>{?_animatingTokenId},
                     ),
                   ),
                 ),
 
-                IgnorePointer(
-                  ignoring: _animatingMove != null,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: <Widget>[
-                      ..._buildTokenTargets(frame: frame, innerSide: innerSide),
-                      ..._buildDestinationTargets(
-                        frame: frame,
-                        innerSide: innerSide,
-                      ),
-                    ],
-                  ),
-                ),
-
-                if (_animatingMove != null)
+                if (!animating && widget.selectedTokenId != null)
                   Positioned.fill(
-                    child: RepaintBoundary(
+                    child: IgnorePointer(
                       child: Stack(
                         clipBehavior: Clip.none,
-                        children: <Widget>[
-                          _buildAnimatedToken(
-                            frame: frame,
-                            innerSide: innerSide,
-                          ),
-                        ],
+                        children: _buildDestinationMarkers(
+                          frame: frame,
+                          innerSide: innerSide,
+                        ),
                       ),
                     ),
                   ),
-                if (widget.selectableRolls.isNotEmpty &&
+
+                // One hit test for the whole board (see [resolveTap]).
+                Positioned.fill(
+                  child: GestureDetector(
+                    key: const ValueKey<String>('board-input'),
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: animating
+                        ? null
+                        : (details) => _handleBoardTap(
+                            details.localPosition - Offset(frame, frame),
+                          ),
+                  ),
+                ),
+
+                if (animating)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: _buildAnimatedToken(
+                          frame: frame,
+                          innerSide: innerSide,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (!animating &&
+                    widget.selectableRolls.isNotEmpty &&
                     widget.selectedTokenId != null)
-                  _buildSelectedTokenDice(frame: frame, innerSide: innerSide),
+                  ..._buildSelectedTokenDice(
+                    side: side,
+                    frame: frame,
+                    innerSide: innerSide,
+                  ),
               ],
             ),
           ),
@@ -197,6 +253,112 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     _controller.dispose();
     super.dispose();
   }
+
+  // ============================================================
+  // INPUT
+  // ============================================================
+
+  String _tokenIdOf(MoveOption move) {
+    return switch (move) {
+      MoveToken(:final tokenId) => tokenId,
+      ExitToken(:final tokenId) => tokenId,
+    };
+  }
+
+  /// Moves of the selected token that the current die choice allows.
+  List<MoveOption> _selectedCandidates(List<MoveOption> moves) {
+    final selectedTokenId = widget.selectedTokenId;
+    return moves
+        .where(
+          (move) =>
+              _tokenIdOf(move) == selectedTokenId &&
+              (widget.selectedRollSequence == null ||
+                  move.rollSequence == widget.selectedRollSequence),
+        )
+        .toList(growable: false);
+  }
+
+  /// Resolves a tap at [point] (playing-area coordinates, side
+  /// [innerSide]) to a destination of the selected token or the nearest
+  /// movable token of the current player. Dice chips are on top of the
+  /// board and never reach this hit test.
+  @visibleForTesting
+  BoardTapTarget? resolveTap(Offset point, double innerSide) {
+    final cell = innerSide / LudoBoardGeometry.gridSize;
+    final geometry = LudoBoardGeometry.instance;
+
+    // 1. A destination of the selected token.
+    if (widget.selectedTokenId != null) {
+      final half = LudoMatchBoard.destinationHitSide(cell) / 2;
+      MoveOption? best;
+      var bestDistance = double.infinity;
+
+      for (final entry in widget.legalMoveDestinations.entries) {
+        final candidates = _selectedCandidates(entry.value);
+        if (candidates.isEmpty) continue;
+
+        final center = geometry.cellCenter(entry.key, innerSide);
+        final delta = point - center;
+        if (delta.dx.abs() > half || delta.dy.abs() > half) continue;
+
+        // Two dice of the same value reach the same square the same way;
+        // different values to one square cannot be told apart, so wait
+        // for a die to be chosen.
+        final values = candidates.map(widget.rollValueForMove).toSet();
+        if (values.length != 1) continue;
+
+        final distance = delta.distance;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = candidates.first;
+        }
+      }
+
+      if (best != null) return DestinationTapTarget(best);
+    }
+
+    // 2. The nearest token of the current player that has a legal move.
+    final movable = <String>{
+      for (final move in widget.availableMoves) _tokenIdOf(move),
+    };
+    if (movable.isEmpty) return null;
+
+    final centers = LudoTokenLayout.centers(widget.players, innerSide);
+    final radius = LudoMatchBoard.tokenHitRadius(cell);
+    LudoToken? nearest;
+    var nearestDistance = double.infinity;
+
+    for (final player in widget.players) {
+      if (player.playerId != widget.currentPlayerId) continue;
+      for (final token in player.tokens) {
+        if (!movable.contains(token.id)) continue;
+        final distance = (point - centers[token.id]!).distance;
+        if (distance <= radius && distance < nearestDistance) {
+          nearestDistance = distance;
+          nearest = token;
+        }
+      }
+    }
+
+    return nearest == null ? null : TokenTapTarget(nearest);
+  }
+
+  void _handleBoardTap(Offset point) {
+    if (_animatingMove != null || _innerSide <= 0) return;
+
+    switch (resolveTap(point, _innerSide)) {
+      case DestinationTapTarget(:final move):
+        _startMoveAnimation(move);
+      case TokenTapTarget(:final token):
+        widget.onTokenTap(token);
+      case null:
+        break;
+    }
+  }
+
+  // ============================================================
+  // MOVE ANIMATION
+  // ============================================================
 
   void _tryStartAutomaticMove() {
     if (_animatingMove != null || !mounted) return;
@@ -212,22 +374,9 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
     // لو اختار اللاعب قطعة ورمية نرد، وكانت هناك حركة قانونية واحدة
     // تطابق الاختيار، شغّل الأنيميشن بدل التنفيذ المباشر.
-    final tokenId = widget.selectedTokenId;
-    if (tokenId == null) return;
+    if (widget.selectedTokenId == null) return;
 
-    final candidates = widget.availableMoves
-        .where((move) {
-          final moveTokenId = switch (move) {
-            MoveToken(:final tokenId) => tokenId,
-            ExitToken(:final tokenId) => tokenId,
-          };
-
-          return moveTokenId == tokenId &&
-              (widget.selectedRollSequence == null ||
-                  move.rollSequence == widget.selectedRollSequence);
-        })
-        .toList(growable: false);
-
+    final candidates = _selectedCandidates(widget.availableMoves);
     if (candidates.length == 1) {
       _startMoveAnimation(candidates.single);
     }
@@ -255,10 +404,7 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       return;
     }
 
-    final tokenId = switch (move) {
-      MoveToken(:final tokenId) => tokenId,
-      ExitToken(:final tokenId) => tokenId,
-    };
+    final tokenId = _tokenIdOf(move);
 
     final player = widget.players.cast<LudoPlayer?>().firstWhere(
       (p) => p?.tokens.any((token) => token.id == tokenId) ?? false,
@@ -416,96 +562,21 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
     return Offset.lerp(from, to, fraction)!;
   }
 
-  List<Widget> _buildTokenTargets({
+  // ============================================================
+  // LAYERS
+  // ============================================================
+
+  List<Widget> _buildDestinationMarkers({
     required double frame,
     required double innerSide,
   }) {
     final geometry = LudoBoardGeometry.instance;
     final cell = innerSide / LudoBoardGeometry.gridSize;
-    final diameter = cell * 1.15;
-    final widgets = <Widget>[];
-
-    for (final player in widget.players) {
-      for (final token in player.tokens) {
-        // لا نسمح باختيار قطعة لاعب آخر.
-        if (player.playerId != widget.currentPlayerId) continue;
-
-        // القطع التي ليس لها حركة قانونية لا تحتاج منطقة ضغط.
-        final hasLegalMove = widget.availableMoves.any((move) {
-          return switch (move) {
-            MoveToken(:final tokenId) => tokenId == token.id,
-            ExitToken(:final tokenId) => tokenId == token.id,
-          };
-        });
-
-        if (!hasLegalMove) continue;
-
-        final position = token.isInitial
-            ? geometry.tokenHomePosition(
-                color: player.color,
-                tokenIndex: token.tokenIndex,
-              )
-            : token.position;
-
-        final center = geometry.cellCenter(position, innerSide);
-        final isSelected = widget.selectedTokenId == token.id;
-
-        widgets.add(
-          Positioned(
-            left: frame + center.dx - diameter / 2,
-            top: frame + center.dy - diameter / 2,
-            width: diameter,
-            height: diameter,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => widget.onTokenTap(token),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected ? Colors.white : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    return widgets;
-  }
-
-  List<Widget> _buildDestinationTargets({
-    required double frame,
-    required double innerSide,
-  }) {
-    final selectedTokenId = widget.selectedTokenId;
-
-    if (selectedTokenId == null || _animatingMove != null) {
-      return const <Widget>[];
-    }
-
-    final geometry = LudoBoardGeometry.instance;
-    final cell = innerSide / LudoBoardGeometry.gridSize;
-    final size = cell * .76;
+    final size = cell * .86;
     final widgets = <Widget>[];
 
     for (final entry in widget.legalMoveDestinations.entries) {
-      final candidates = entry.value
-          .where((move) {
-            final matchesToken = switch (move) {
-              MoveToken(:final tokenId) => tokenId == selectedTokenId,
-              ExitToken(:final tokenId) => tokenId == selectedTokenId,
-            };
-
-            return matchesToken &&
-                (widget.selectedRollSequence == null ||
-                    move.rollSequence == widget.selectedRollSequence);
-          })
-          .toList(growable: false);
-
+      final candidates = _selectedCandidates(entry.value);
       if (candidates.isEmpty) continue;
 
       final center = geometry.cellCenter(entry.key, innerSide);
@@ -517,25 +588,14 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
           top: frame + center.dy - size / 2,
           width: size,
           height: size,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              if (_animatingMove != null) return;
-
-              // لا نخمن الحركة إذا بقي أكثر من اختيار صالح.
-              if (candidates.length != 1) return;
-
-              _startMoveAnimation(candidates.single);
-            },
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xDDFFFFFF),
-                borderRadius: BorderRadius.circular(size * .22),
-                border: Border.all(color: const Color(0xFFFFD166), width: 2),
-              ),
-              child: Center(
-                child: MatchDieFace(value: diceValue, size: size * .85),
-              ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xDDFFFFFF),
+              borderRadius: BorderRadius.circular(size * .22),
+              border: Border.all(color: const Color(0xFFFFD166), width: 2),
+            ),
+            child: Center(
+              child: MatchDieFace(value: diceValue, size: size * .8),
             ),
           ),
         ),
@@ -565,183 +625,178 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
 
     if (owner == null) return const SizedBox.shrink();
 
-    final tone = matchUiColorFor(owner.color);
     final cell = innerSide / LudoBoardGeometry.gridSize;
-    final diameter = cell * .71;
+    final color = owner.color;
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final center = _animatedCenter(innerSide);
-        // A small lift in the middle of each hop.
-        final lift = math.sin(math.pi * _hopFraction());
-
-        return Positioned(
-          left: frame + center.dx - diameter / 2,
-          top: frame + center.dy - diameter / 2 - lift * diameter * .18,
-          width: diameter,
-          height: diameter,
-          child: Transform.scale(scale: 1 + lift * .16, child: child),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            center: const Alignment(-.35, -.4),
-            colors: <Color>[
-              Color.lerp(tone, Colors.white, .45)!,
-              tone,
-              Color.lerp(tone, Colors.black, .30)!,
-            ],
-          ),
-          border: Border.all(color: const Color(0xFFFFF4D8), width: 2),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(
-              color: Color(0x99000000),
-              blurRadius: 5,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: const Icon(Icons.person, color: Color(0xFFFFF9EB), size: 2),
+    // Transform only: the token moves every frame without a new layout.
+    return CustomPaint(
+      painter: _MovingTokenPainter(
+        animation: _controller,
+        color: color,
+        cell: cell,
+        origin: Offset(frame, frame),
+        center: () => _animatedCenter(innerSide),
+        lift: () => math.sin(math.pi * _hopFraction()),
       ),
     );
   }
 
-  Widget _buildSelectedTokenDice({
+  List<Widget> _buildSelectedTokenDice({
+    required double side,
     required double frame,
     required double innerSide,
   }) {
     final tokenId = widget.selectedTokenId;
 
-    if (tokenId == null || widget.selectableRolls.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     LudoPlayer? owner;
-    LudoToken? token;
-
     for (final player in widget.players) {
-      for (final playerToken in player.tokens) {
-        if (playerToken.id == tokenId) {
-          owner = player;
-          token = playerToken;
-          break;
-        }
+      if (player.tokens.any((token) => token.id == tokenId)) {
+        owner = player;
+        break;
       }
-
-      if (owner != null) break;
     }
 
-    if (owner == null || token == null) {
-      return const SizedBox.shrink();
-    }
+    if (owner == null || tokenId == null) return const <Widget>[];
 
     final color = matchUiColorFor(owner.color);
-    const dieSize = 25.0;
+    const dieSize = LudoMatchBoard.boardDieSize;
     const spacing = 4.0;
 
     final rolls = widget.selectableRolls.rolls;
     final totalWidth = rolls.length * dieSize + (rolls.length - 1) * spacing;
 
-    final geometry = LudoBoardGeometry.instance;
-
-    Offset tokenCenter() {
-      if (_animatingTokenId == tokenId &&
-          _animatingMove != null &&
-          _animationPath.length > 1) {
-        return _animatedCenter(innerSide);
-      }
-
-      final position = token!.isInitial
-          ? geometry.tokenHomePosition(
-              color: owner!.color,
-              tokenIndex: token.tokenIndex,
-            )
-          : token.position;
-
-      return geometry.cellCenter(position, innerSide);
-    }
+    final cell = innerSide / LudoBoardGeometry.gridSize;
+    final center =
+        Offset(frame, frame) +
+        LudoTokenLayout.centers(widget.players, innerSide)[tokenId]!;
+    final gap = LudoTokenLayout.tokenRadius(cell) + 4;
 
     // A top-row player sits across the table: their chips are turned to
-    // face them and sit on their side of the token.
+    // face them and sit on their side of the token. Chips stay inside the
+    // board so every one of them can be tapped.
     final facesFarSide = MatchSeatLayout.facesFarSide(owner.color);
+    final above = center.dy - gap - dieSize;
+    final below = center.dy + gap;
+    var top = facesFarSide ? below : above;
+    if (top < 0) top = below;
+    if (top + dieSize > side) top = above;
+    final left = (center.dx - totalWidth / 2)
+        .clamp(0.0, math.max(0.0, side - totalWidth))
+        .toDouble();
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final center = tokenCenter();
-
-        return Positioned(
-          left: frame + center.dx - totalWidth / 2,
-          top: facesFarSide
-              ? frame + center.dy + dieSize * .65
-              : frame + center.dy - dieSize * 1.65,
-          width: totalWidth,
-          height: dieSize,
-          child: RotatedBox(quarterTurns: facesFarSide ? 2 : 0, child: child),
-        );
-      },
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var index = 0; index < rolls.length; index++) ...[
-            if (index > 0) const SizedBox(width: spacing),
-
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                key: ValueKey<String>('board-die-${rolls[index].sequence}'),
-                borderRadius: BorderRadius.circular(7),
-                onTap: _animatingMove != null
-                    ? null
-                    : () => widget.onAvailableRollTap(rolls[index].sequence),
-                child: Container(
-                  width: dieSize,
-                  height: dieSize,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF181321),
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(
-                      color:
-                          widget.selectedRollSequence == rolls[index].sequence
-                          ? const Color(0xFFFFD166)
-                          : color,
-                      width:
-                          widget.selectedRollSequence == rolls[index].sequence
-                          ? 2
-                          : 1.3,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: .35),
-                        blurRadius: 5,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: MatchDieFace(value: rolls[index].value, size: 19),
+    return <Widget>[
+      Positioned(
+        left: left,
+        top: top,
+        width: totalWidth,
+        height: dieSize,
+        child: RotatedBox(
+          quarterTurns: facesFarSide ? 2 : 0,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var index = 0; index < rolls.length; index++) ...[
+                if (index > 0) const SizedBox(width: spacing),
+                _BoardDieChip(
+                  key: ValueKey<String>('board-die-${rolls[index].sequence}'),
+                  value: rolls[index].value,
+                  size: dieSize,
+                  color: color,
+                  selected:
+                      widget.selectedRollSequence == rolls[index].sequence,
+                  onTap: () => widget.onAvailableRollTap(rolls[index].sequence),
                 ),
-              ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
+class _BoardDieChip extends StatelessWidget {
+  final int value;
+  final double size;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _BoardDieChip({
+    super.key,
+    required this.value,
+    required this.size,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: const Color(0xFF181321),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: selected ? const Color(0xFFFFD166) : color,
+            width: selected ? 2.4 : 1.6,
+          ),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x59000000),
+              blurRadius: 5,
+              offset: Offset(0, 2),
             ),
           ],
-        ],
+        ),
+        alignment: Alignment.center,
+        child: MatchDieFace(value: value, size: size * .72),
       ),
     );
   }
 }
 
-/*class _BoardToken {
-  final LudoPlayer player;
-  final LudoToken token;
-  final Position position;
+/// Paints the token that walks along its path. It repaints with the
+/// animation but never lays anything out again.
+class _MovingTokenPainter extends CustomPainter {
+  final Animation<double> animation;
+  final LudoPlayerColor color;
+  final double cell;
+  final Offset origin;
+  final Offset Function() center;
+  final double Function() lift;
 
-  const _BoardToken({
-    required this.player,
-    required this.token,
-    required this.position,
-  });
-}*/
+  _MovingTokenPainter({
+    required this.animation,
+    required this.color,
+    required this.cell,
+    required this.origin,
+    required this.center,
+    required this.lift,
+  }) : super(repaint: animation);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A small lift in the middle of each hop.
+    final hop = lift();
+    final at = origin + center() - Offset(0, hop * cell * .14);
+    canvas.save();
+    canvas.translate(at.dx, at.dy);
+    canvas.scale(1 + hop * .16);
+    paintMatchToken(canvas, Offset.zero, cell, color);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _MovingTokenPainter oldDelegate) {
+    return oldDelegate.color != color ||
+        oldDelegate.cell != cell ||
+        oldDelegate.origin != origin;
+  }
+}

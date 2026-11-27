@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
-import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/geometry/ludo_board_geometry.dart';
+import 'package:ludo_rank/features/ludo_game/presentation/geometry/ludo_token_layout.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_ui_colors.dart';
 
 /// Live match board treatment used by MatchGamePage.
@@ -15,13 +16,13 @@ import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match
 class LudoMatchBoardArt extends StatelessWidget {
   final List<LudoPlayer> players;
 
-  /// إخفاء القطعة الأصلية مؤقتًا أثناء الأنيميشن.
-  final String? hiddenTokenId;
+  /// Tokens drawn by an animation layer instead (moving or sent home).
+  final Set<String> hiddenTokenIds;
 
   const LudoMatchBoardArt({
     super.key,
     required this.players,
-    this.hiddenTokenId,
+    this.hiddenTokenIds = const <String>{},
   });
 
   @override
@@ -87,7 +88,7 @@ class LudoMatchBoardArt extends StatelessWidget {
                           size: Size.square(innerSide),
                           painter: _MatchBoardPainter.tokens(
                             players: players,
-                            hiddenTokenId: hiddenTokenId,
+                            hiddenTokenIds: hiddenTokenIds,
                           ),
                         ),
                       ),
@@ -105,7 +106,7 @@ class LudoMatchBoardArt extends StatelessWidget {
 
 class _MatchBoardPainter extends CustomPainter {
   final List<LudoPlayer> players;
-  final String? hiddenTokenId;
+  final Set<String> hiddenTokenIds;
 
   /// True: static board art. False: tokens, lane locks and the outer edge.
   final bool paintsBackground;
@@ -114,11 +115,13 @@ class _MatchBoardPainter extends CustomPainter {
 
   const _MatchBoardPainter.background()
     : players = const <LudoPlayer>[],
-      hiddenTokenId = null,
+      hiddenTokenIds = const <String>{},
       paintsBackground = true;
 
-  const _MatchBoardPainter.tokens({required this.players, this.hiddenTokenId})
-    : paintsBackground = false;
+  const _MatchBoardPainter.tokens({
+    required this.players,
+    required this.hiddenTokenIds,
+  }) : paintsBackground = false;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -459,139 +462,14 @@ class _MatchBoardPainter extends CustomPainter {
   }
 
   void _paintTokens(Canvas canvas, double side, double cell) {
-    final groups = <Position, List<_TokenVisual>>{};
+    final centers = LudoTokenLayout.centers(players, side);
     for (final player in players) {
       for (final token in player.tokens) {
-        final position = token.isInitial
-            ? geometry.tokenHomePosition(
-                color: player.color,
-                tokenIndex: token.tokenIndex,
-              )
-            : token.position;
-        groups
-            .putIfAbsent(position, () => <_TokenVisual>[])
-            .add(
-              _TokenVisual(
-                color: player.color,
-                position: position,
-                tokenId: token.id,
-              ),
-            );
+        if (hiddenTokenIds.contains(token.id)) continue;
+        final center = centers[token.id]!;
+        paintMatchToken(canvas, center, cell, player.color);
       }
     }
-
-    final radius = cell * .43;
-    for (final group in groups.values) {
-      for (var i = 0; i < group.length; i++) {
-        final item = group[i];
-        if (item.tokenId == hiddenTokenId) {
-          continue;
-        }
-        final center =
-            geometry.cellCenter(item.position, side) +
-            _stackOffset(i, group.length, cell);
-        final tone = matchUiColorFor(item.color);
-        final darkTone = Color.lerp(tone, Colors.black, .30)!;
-        final lightTone = Color.lerp(tone, Colors.white, .45)!;
-        final tokenRect = Rect.fromCircle(center: center, radius: radius);
-
-        // Drop shadow, outer metal-like rim, colored coin and inner ring.
-        canvas.drawCircle(
-          center + Offset(0, cell * .055),
-          radius * 1.14,
-          Paint()
-            ..color = const Color(0x99000000)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * .08),
-        );
-        canvas.drawCircle(
-          center,
-          radius * 1.12,
-          Paint()..color = const Color(0xFFFFF4D8),
-        );
-        canvas.drawCircle(
-          center,
-          radius * 1.04,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = math.max(1.0, cell * .055).toDouble()
-            ..color = darkTone,
-        );
-        canvas.drawCircle(
-          center,
-          radius * .96,
-          Paint()
-            ..shader = RadialGradient(
-              center: const Alignment(-.38, -.48),
-              radius: 1.2,
-              colors: <Color>[lightTone, tone, darkTone],
-              stops: const <double>[0, .55, 1],
-            ).createShader(tokenRect),
-        );
-        canvas.drawCircle(
-          center,
-          radius * .72,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = math.max(.8, cell * .035).toDouble()
-            ..color = Colors.white.withValues(alpha: .88),
-        );
-        _paintTokenEmblem(canvas, center, radius);
-        canvas.drawCircle(
-          center - Offset(radius * .29, radius * .34),
-          radius * .15,
-          Paint()..color = Colors.white.withValues(alpha: .60),
-        );
-      }
-    }
-  }
-
-  void _paintTokenEmblem(Canvas canvas, Offset center, double radius) {
-    final emblemPaint = Paint()
-      ..color = const Color(0xFFFFF9EB).withValues(alpha: .96);
-    // A compact pawn-like emblem remains legible even on a small mobile cell.
-    canvas.drawCircle(
-      center - Offset(0, radius * .23),
-      radius * .16,
-      emblemPaint,
-    );
-    final bodyRect = Rect.fromCenter(
-      center: center + Offset(0, radius * .19),
-      width: radius * .58,
-      height: radius * .40,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(bodyRect, Radius.circular(radius * .16)),
-      emblemPaint,
-    );
-    canvas.drawCircle(
-      center + Offset(0, radius * .02),
-      radius * .055,
-      Paint()..color = const Color(0xFF6C4B31).withValues(alpha: .75),
-    );
-  }
-
-  Offset _stackOffset(int index, int count, double cell) {
-    const two = <Offset>[Offset(-.16, -.16), Offset(.16, .16)];
-    const three = <Offset>[
-      Offset(-.15, -.13),
-      Offset(.15, -.13),
-      Offset(0, .16),
-    ];
-    const four = <Offset>[
-      Offset(-.16, -.16),
-      Offset(.16, -.16),
-      Offset(-.16, .16),
-      Offset(.16, .16),
-    ];
-
-    if (count <= 1) return Offset.zero;
-    final offsets = count == 2
-        ? two
-        : count == 3
-        ? three
-        : four;
-    final safeIndex = index.clamp(0, offsets.length - 1).toInt();
-    return offsets[safeIndex] * cell;
   }
 
   void _paintHomeLaneLocks(Canvas canvas, double side, double cell) {
@@ -711,20 +589,8 @@ class _MatchBoardPainter extends CustomPainter {
     if (paintsBackground && oldDelegate.paintsBackground) return false;
     return oldDelegate.paintsBackground != paintsBackground ||
         oldDelegate.players != players ||
-        oldDelegate.hiddenTokenId != hiddenTokenId;
+        !setEquals(oldDelegate.hiddenTokenIds, hiddenTokenIds);
   }
-}
-
-class _TokenVisual {
-  final String tokenId;
-  final LudoPlayerColor color;
-  final Position position;
-
-  const _TokenVisual({
-    required this.tokenId,
-    required this.color,
-    required this.position,
-  });
 }
 
 class _TriangleSlice {
@@ -734,4 +600,92 @@ class _TriangleSlice {
   final Offset center;
 
   const _TriangleSlice(this.color, this.a, this.b, this.center);
+}
+
+/// Draws one token (shadow, rim, coin, emblem) centred on [center], the same
+/// way the board does. Animation layers use it so a moving token looks like
+/// the one on the board.
+void paintMatchToken(
+  Canvas canvas,
+  Offset center,
+  double cell,
+  LudoPlayerColor color,
+) {
+  final radius = cell * .43;
+  final tone = matchUiColorFor(color);
+  final darkTone = Color.lerp(tone, Colors.black, .30)!;
+  final lightTone = Color.lerp(tone, Colors.white, .45)!;
+  final tokenRect = Rect.fromCircle(center: center, radius: radius);
+
+  // Drop shadow, outer metal-like rim, colored coin and inner ring.
+  canvas.drawCircle(
+    center + Offset(0, cell * .055),
+    radius * 1.14,
+    Paint()
+      ..color = const Color(0x99000000)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, cell * .08),
+  );
+  canvas.drawCircle(
+    center,
+    radius * 1.12,
+    Paint()..color = const Color(0xFFFFF4D8),
+  );
+  canvas.drawCircle(
+    center,
+    radius * 1.04,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1.0, cell * .055).toDouble()
+      ..color = darkTone,
+  );
+  canvas.drawCircle(
+    center,
+    radius * .96,
+    Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-.38, -.48),
+        radius: 1.2,
+        colors: <Color>[lightTone, tone, darkTone],
+        stops: const <double>[0, .55, 1],
+      ).createShader(tokenRect),
+  );
+  canvas.drawCircle(
+    center,
+    radius * .72,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(.8, cell * .035).toDouble()
+      ..color = Colors.white.withValues(alpha: .88),
+  );
+  _paintTokenEmblem(canvas, center, radius);
+  canvas.drawCircle(
+    center - Offset(radius * .29, radius * .34),
+    radius * .15,
+    Paint()..color = Colors.white.withValues(alpha: .60),
+  );
+}
+
+void _paintTokenEmblem(Canvas canvas, Offset center, double radius) {
+  final emblemPaint = Paint()
+    ..color = const Color(0xFFFFF9EB).withValues(alpha: .96);
+  // A compact pawn-like emblem remains legible even on a small mobile cell.
+  canvas.drawCircle(
+    center - Offset(0, radius * .23),
+    radius * .16,
+    emblemPaint,
+  );
+  final bodyRect = Rect.fromCenter(
+    center: center + Offset(0, radius * .19),
+    width: radius * .58,
+    height: radius * .40,
+  );
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(bodyRect, Radius.circular(radius * .16)),
+    emblemPaint,
+  );
+  canvas.drawCircle(
+    center + Offset(0, radius * .02),
+    radius * .055,
+    Paint()..color = const Color(0xFF6C4B31).withValues(alpha: .75),
+  );
 }
