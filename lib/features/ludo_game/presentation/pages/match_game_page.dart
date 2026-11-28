@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ludo_rank/shared/widgets/sound_toggle_button.dart';
+import 'package:ludo_rank/core/ui/system_bars.dart';
 
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
@@ -15,6 +16,7 @@ import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_
 import 'package:ludo_rank/features/matches/presentation/providers/match_game_provider.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_seat_layout.dart';
@@ -186,40 +188,44 @@ class _MatchGamePageState extends State<MatchGamePage> {
         maxScaleFactor: maxTextScale,
         child: _MatchPopGuard(
           onBack: _handleBack,
-          child: Scaffold(
-            appBar: AppBar(
-              toolbarHeight: 48,
-              centerTitle: true,
-              title: const Text(
-                'LudoRank',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-              ),
-              leading: _BackButton(leaving: _leaving, onBack: _handleBack),
-              actions: const <Widget>[_AppBarAction()],
-              bottom: const PreferredSize(
-                preferredSize: Size.fromHeight(1),
-                child: Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: Color(0xFF51465E),
+          // Players sit around the phone: the system bars are hidden so a
+          // hand on the edge never presses Home or Back by accident.
+          child: ImmersiveSystemBars(
+            child: Scaffold(
+              appBar: AppBar(
+                toolbarHeight: 48,
+                centerTitle: true,
+                title: const Text(
+                  'LudoRank',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+                leading: _BackButton(leaving: _leaving, onBack: _handleBack),
+                actions: const <Widget>[_AppBarAction()],
+                bottom: const PreferredSize(
+                  preferredSize: Size.fromHeight(1),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Color(0xFF51465E),
+                  ),
                 ),
               ),
-            ),
-            body: SafeArea(
-              top: false,
-              child: Stack(
-                children: <Widget>[
-                  _LiveMatchLayout(
-                    onTokenTap: _onTokenTap,
-                    onMove: _executeMove,
-                  ),
-                  const _RollNoticeLayer(),
-                  const _ErrorLayer(),
-                  _ResultLayer(
-                    playerNames: widget.playerNames,
-                    onClose: () => Navigator.pop(context, true),
-                  ),
-                ],
+              body: SafeArea(
+                top: false,
+                child: Stack(
+                  children: <Widget>[
+                    _LiveMatchLayout(
+                      onTokenTap: _onTokenTap,
+                      onMove: _executeMove,
+                    ),
+                    const _RollNoticeLayer(),
+                    const _ErrorLayer(),
+                    _ResultLayer(
+                      playerNames: widget.playerNames,
+                      onClose: () => Navigator.pop(context, true),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -424,62 +430,56 @@ class _LiveMatchLayout extends StatelessWidget {
         final topHasPlayers = MatchSeatLayout.topRow.any(plays);
         final bottomHasPlayers = MatchSeatLayout.bottomRow.any(plays);
 
-        return Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(sidePadding, 5, sidePadding, 5),
-              child: Column(
-                children: <Widget>[
-                  if (topHasPlayers) ...<Widget>[
-                    SizedBox(
-                      height: heights.active,
-                      child: _buildHomeSideRow(
-                        colors: MatchSeatLayout.topRow,
-                        facesFarSide: true,
-                        plays: plays,
-                        activeHeight: heights.active,
-                        inactiveHeight: heights.inactive,
-                      ),
-                    ),
-                    SizedBox(height: rowGap),
-                  ],
-                  Expanded(
-                    child: Center(
-                      child: LayoutBuilder(
-                        builder: (context, boardConstraints) {
-                          final side =
-                              boardConstraints.maxWidth <
-                                  boardConstraints.maxHeight
-                              ? boardConstraints.maxWidth
-                              : boardConstraints.maxHeight;
+        // The cards, the board and the gaps between them form one group
+        // that is centred on the screen: the cards always touch the board,
+        // and any spare height goes above and below the whole group.
+        const verticalPadding = 5.0;
+        final width = math.min(constraints.maxWidth, 560.0) - sidePadding * 2;
+        final rowsHeight =
+            (topHasPlayers ? heights.active + rowGap : 0) +
+            (bottomHasPlayers ? heights.active + rowGap : 0);
+        final boardSide = math.max(
+          0.0,
+          math.min(
+            width,
+            constraints.maxHeight - verticalPadding * 2 - rowsHeight,
+          ),
+        );
 
-                          return SizedBox.square(
-                            dimension: side,
-                            child: _BoardSlot(
-                              onTokenTap: onTokenTap,
-                              onMove: onMove,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  if (bottomHasPlayers) ...<Widget>[
-                    SizedBox(height: rowGap),
-                    SizedBox(
-                      height: heights.active,
-                      child: _buildHomeSideRow(
-                        colors: MatchSeatLayout.bottomRow,
-                        facesFarSide: false,
-                        plays: plays,
-                        activeHeight: heights.active,
-                        inactiveHeight: heights.inactive,
-                      ),
-                    ),
-                  ],
+        Widget row(List<LudoPlayerColor> colors, {required bool top}) {
+          return SizedBox(
+            width: width,
+            height: heights.active,
+            child: _buildHomeSideRow(
+              colors: colors,
+              facesFarSide: top,
+              plays: plays,
+              activeHeight: heights.active,
+              inactiveHeight: heights.inactive,
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: verticalPadding),
+          child: Center(
+            child: Column(
+              key: const ValueKey<String>('match-seat-group'),
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (topHasPlayers) ...<Widget>[
+                  row(MatchSeatLayout.topRow, top: true),
+                  SizedBox(height: rowGap),
                 ],
-              ),
+                SizedBox.square(
+                  dimension: boardSide,
+                  child: _BoardSlot(onTokenTap: onTokenTap, onMove: onMove),
+                ),
+                if (bottomHasPlayers) ...<Widget>[
+                  SizedBox(height: rowGap),
+                  row(MatchSeatLayout.bottomRow, top: false),
+                ],
+              ],
             ),
           ),
         );
