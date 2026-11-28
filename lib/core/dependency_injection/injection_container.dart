@@ -189,6 +189,7 @@ Future<void> initDependencies({
       service: sl<MatchGameService>(),
       sounds: sl<SoundController>(),
       autoMoveDelay: const Duration(milliseconds: 450),
+      diceAnimationDuration: const Duration(milliseconds: 400),
       checkpointer: sl<DatabaseCheckpointer>(),
     ),
   );

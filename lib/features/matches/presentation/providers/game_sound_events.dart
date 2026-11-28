@@ -27,6 +27,16 @@ class GameSoundEvents {
     return const [GameSound.dice];
   }
 
+  /// The vibration that goes with a move's [sound], if any: light for a
+  /// capture, medium for a token home or a win.
+  static GameHaptic? hapticFor(GameSound? sound) {
+    return switch (sound) {
+      GameSound.capture => GameHaptic.light,
+      GameSound.home || GameSound.win => GameHaptic.medium,
+      _ => null,
+    };
+  }
+
   /// The single most important sound for an executed move
   /// (step sounds are played by the board animation itself).
   ///

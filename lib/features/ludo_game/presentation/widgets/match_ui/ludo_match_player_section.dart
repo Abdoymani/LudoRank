@@ -6,6 +6,10 @@ import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_ui_colors.dart';
 
 /// Current player: active card with dice actions. Other players: name only.
+///
+/// The active card has one action row: the roll button while the player
+/// has to roll, the dice to choose from while they have to move. Both
+/// never show at once, so the card stays short and the board stays big.
 class LudoMatchPlayerSection extends StatelessWidget {
   final LudoPlayer player;
   final bool isCurrent;
@@ -16,6 +20,10 @@ class LudoMatchPlayerSection extends StatelessWidget {
   final double height;
   final ValueChanged<int> onAvailableRollTap;
   final int? selectedRollSequence;
+
+  /// The roll tumbling on this card (its id restarts the tumble), with the
+  /// value it stops on and how long it takes.
+  final ({int id, int value, Duration duration})? rollingDie;
 
   const LudoMatchPlayerSection({
     super.key,
@@ -28,7 +36,51 @@ class LudoMatchPlayerSection extends StatelessWidget {
     required this.height,
     required this.onAvailableRollTap,
     required this.selectedRollSequence,
+    this.rollingDie,
   });
+
+  /// Smallest font on the match screen.
+  static const double minFontSize = 11;
+
+  /// Roll button height (a full touch target).
+  static const double actionRowHeight = 48;
+
+  /// Dice chip size on the card.
+  static const double chipSize = 40;
+
+  static const double _nameFontSize = 13;
+  static const double _activeBorder = 2.1;
+  static const double _verticalPadding = 5;
+  static const double _rowGap = 4;
+
+  /// Height of one text line of [fontSize] under [scaler]. Generous on
+  /// purpose: Arabic fallback fonts on phones are much taller than the
+  /// em box.
+  static double lineHeight(TextScaler scaler, double fontSize) {
+    return scaler.scale(fontSize) * 1.5;
+  }
+
+  static double _nameRowHeight(TextScaler scaler) {
+    final name = lineHeight(scaler, _nameFontSize);
+    final badge = lineHeight(scaler, minFontSize) + 4;
+    return name > badge ? name : badge;
+  }
+
+  /// Height the active card needs for [scaler].
+  static double activeHeightFor(TextScaler scaler) {
+    return (_activeBorder * 2 +
+            _verticalPadding * 2 +
+            _nameRowHeight(scaler) +
+            _rowGap +
+            actionRowHeight)
+        .ceilToDouble();
+  }
+
+  /// Height a waiting player's card needs for [scaler].
+  static double inactiveHeightFor(TextScaler scaler) {
+    final needed = lineHeight(scaler, _nameFontSize) + 12;
+    return (needed > 36 ? needed : 36).ceilToDouble();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,21 +109,25 @@ class LudoMatchPlayerSection extends StatelessWidget {
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white70,
-            fontSize: 13,
+            fontSize: _nameFontSize,
             fontWeight: FontWeight.w700,
           ),
         ),
       );
     }
 
+    final scaler = MediaQuery.textScalerOf(context);
     final foreground = player.color == LudoPlayerColor.yellow
         ? const Color(0xFF21182B)
         : Colors.white;
-    final lastRoll = turnState?.lastRoll;
+    final isPlaying = turnState?.isPlaying == true;
 
     return Container(
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: _verticalPadding,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -83,7 +139,7 @@ class LudoMatchPlayerSection extends StatelessWidget {
           ],
         ),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color, width: 2.1),
+        border: Border.all(color: color, width: _activeBorder),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: color.withValues(alpha: .25),
@@ -94,136 +150,155 @@ class LudoMatchPlayerSection extends StatelessWidget {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.max,
         children: <Widget>[
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  player.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'دورك',
-                  style: TextStyle(
-                    color: foreground,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 9,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: <Widget>[
-              MatchDieFace(value: lastRoll, size: 32),
-              const SizedBox(width: 6),
-              Expanded(
-                child: SizedBox(
-                  height: 34,
-                  child: FilledButton.icon(
-                    onPressed: canRoll ? onRoll : null,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: color,
-                      disabledBackgroundColor: color.withValues(alpha: .35),
-                      foregroundColor: foreground,
-                      disabledForegroundColor: foreground.withValues(
-                        alpha: .72,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      minimumSize: const Size(0, 34),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    icon: const Icon(Icons.casino_rounded, size: 16),
-                    label: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        canRoll
-                            ? 'رمي النرد'
-                            : (turnState?.isPlaying == true
-                                  ? 'اختر حجرًا'
-                                  : 'انتظر دورك'),
-                        maxLines: 1,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
           SizedBox(
-            height: 26,
-            child: availableRolls.isNotEmpty
-                ? ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: availableRolls.rolls.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 5),
-                    itemBuilder: (context, index) {
-                      final roll = availableRolls.rolls[index];
-                      final isSelected = selectedRollSequence == roll.sequence;
-
-                      return Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(7),
-                          onTap: () => onAvailableRollTap(roll.sequence),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? color.withValues(alpha: .35)
-                                  : const Color(0xFF181321),
-                              borderRadius: BorderRadius.circular(7),
-                              border: Border.all(
-                                color: isSelected
-                                    ? const Color(0xFFFFD166)
-                                    : color.withValues(alpha: .72),
-                                width: isSelected ? 2 : 1,
-                              ),
-                            ),
-                            child: MatchDieFace(value: roll.value, size: 18),
-                          ),
-                        ),
-                      );
-                    },
-                  )
-                : Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      turnState?.isRolling == true
-                          ? 'اضغط لرمي النرد'
-                          : 'لا توجد رميات متبقية',
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 9,
-                      ),
+            height: _nameRowHeight(scaler),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    player.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: _nameFontSize,
                     ),
                   ),
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'دورك',
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: foreground,
+                      fontWeight: FontWeight.w900,
+                      fontSize: minFontSize,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: _rowGap),
+          SizedBox(
+            height: actionRowHeight,
+            child: isPlaying && availableRolls.isNotEmpty
+                ? _buildDiceChoices(color)
+                : _buildRollRow(color, foreground),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildRollRow(Color color, Color foreground) {
+    return Row(
+      children: <Widget>[
+        AnimatedMatchDieFace(
+          value: rollingDie?.value ?? turnState?.lastRoll,
+          size: chipSize,
+          rollId: rollingDie?.id,
+          duration: rollingDie?.duration ?? Duration.zero,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: FilledButton.icon(
+            key: const ValueKey<String>('roll-button'),
+            onPressed: canRoll ? onRoll : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: color,
+              disabledBackgroundColor: color.withValues(alpha: .35),
+              foregroundColor: foreground,
+              disabledForegroundColor: foreground.withValues(alpha: .72),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, actionRowHeight),
+              maximumSize: const Size(double.infinity, actionRowHeight),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: const Icon(Icons.casino_rounded, size: 18),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                canRoll ? 'رمي النرد' : 'انتظر',
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiceChoices(Color color) {
+    final rolls = availableRolls.rolls;
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: rolls.length + 1,
+      separatorBuilder: (_, _) => const SizedBox(width: 4),
+      itemBuilder: (context, index) {
+        if (index == rolls.length) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                'اختر حجرًا',
+                maxLines: 1,
+                style: TextStyle(color: Colors.white70, fontSize: minFontSize),
+              ),
+            ),
+          );
+        }
+
+        final roll = rolls[index];
+        final isSelected = selectedRollSequence == roll.sequence;
+
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              key: ValueKey<String>('card-die-${roll.sequence}'),
+              borderRadius: BorderRadius.circular(9),
+              onTap: () => onAvailableRollTap(roll.sequence),
+              child: Container(
+                width: chipSize,
+                height: chipSize,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? color.withValues(alpha: .35)
+                      : const Color(0xFF181321),
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFFFFD166)
+                        : color.withValues(alpha: .72),
+                    width: isSelected ? 2.4 : 1.2,
+                  ),
+                ),
+                child: MatchDieFace(value: roll.value, size: chipSize * .72),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
