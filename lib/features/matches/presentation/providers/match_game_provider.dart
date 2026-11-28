@@ -10,6 +10,7 @@ import 'package:ludo_rank/features/matches/presentation/providers/game_sound_eve
 
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/dice_roll.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/move_option.dart';
@@ -418,11 +419,41 @@ class MatchGameProvider extends ChangeNotifier {
         .map((move) => move.rollSequence)
         .toSet();
 
+    final legal = availableRolls.rolls
+        .where((roll) => legalSequences.contains(roll.sequence))
+        .toList(growable: false);
+    if (_selectedTokenId == null) return AvailableRolls(rolls: legal);
+
+    // For a selected token two dice of the same value are the same move:
+    // one chip per value (6, 6, 4 -> 6, 4). The chip is the die already
+    // chosen on the card if it has that value, else the first one.
+    final selected = _selectedRollSequence;
+    final keep = <int, DiceRoll>{};
+    for (final roll in legal) {
+      final current = keep[roll.value];
+      if (current == null || roll.sequence == selected) {
+        keep[roll.value] = roll;
+      }
+    }
     return AvailableRolls(
-      rolls: availableRolls.rolls
-          .where((roll) => legalSequences.contains(roll.sequence))
+      rolls: legal
+          .where((roll) => identical(keep[roll.value], roll))
           .toList(growable: false),
     );
+  }
+
+  /// True when every move in [moves] uses a die of the same value. For one
+  /// token such moves are identical (same path, same square, same
+  /// captures), whichever of the equal dice is used.
+  bool _allSameValue(List<MoveOption> moves) {
+    if (moves.isEmpty) return false;
+    final values = moves.map(rollValueForMove).toSet();
+    return values.length == 1 && values.single != null;
+  }
+
+  /// The move that uses the earliest die (lowest roll sequence).
+  MoveOption _lowestSequence(List<MoveOption> moves) {
+    return moves.reduce((a, b) => a.rollSequence <= b.rollSequence ? a : b);
   }
 
   // ============================================================
@@ -773,9 +804,11 @@ class MatchGameProvider extends ChangeNotifier {
       return;
     }
 
-    // لمسة واحدة تكفي عندما توجد حركة قانونية واحدة فقط.
-    if (tokenMoves.length == 1) {
-      _pendingAutoMove = tokenMoves.single;
+    // لمسة واحدة تكفي عندما توجد حركة قانونية واحدة فقط، أو عندما كل
+    // حركات الحجر بنفس قيمة النرد (6 و6 مثلًا): هي نفس الحركة بالظبط،
+    // فمفيش داعي نسأل اللاعب يختار بين 6 و6.
+    if (tokenMoves.length == 1 || _allSameValue(tokenMoves)) {
+      _pendingAutoMove = _lowestSequence(tokenMoves);
       notifyListeners();
       return;
     }
@@ -850,7 +883,7 @@ class MatchGameProvider extends ChangeNotifier {
         currentSession.engine.state,
         move,
       );
-      if (moveSound != null) sounds?.play(moveSound);
+      sounds?.play(moveSound);
       final haptic = GameSoundEvents.hapticFor(moveSound);
       if (haptic != null) sounds?.haptic(haptic);
 
