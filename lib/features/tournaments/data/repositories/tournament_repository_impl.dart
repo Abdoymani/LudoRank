@@ -28,6 +28,18 @@ class TournamentRepositoryImpl implements TournamentRepository {
   }
 
   @override
+  Future<Map<String, TournamentCounts>> getTournamentCounts() async {
+    final counts = await dao.getTournamentCounts();
+
+    return counts.map(
+      (id, count) => MapEntry(
+        id,
+        TournamentCounts(players: count.players, matches: count.matches),
+      ),
+    );
+  }
+
+  @override
   Future<void> addTournament(Tournament tournament) async {
     final model = TournamentModel.fromEntity(tournament);
 

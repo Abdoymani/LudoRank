@@ -14,6 +14,9 @@ enum TournamentStatus {
 }
 
 class Tournament extends Equatable {
+  /// Input limit for the tournament name field.
+  static const int maxNameLength = 30;
+
   final String id;
 
   final String name;
@@ -55,4 +58,18 @@ class Tournament extends Equatable {
 
   @override
   List<Object?> get props => [id, name, status, rounds, createdAt, updatedAt];
+}
+
+/// How many players joined a tournament and how many matches it has
+/// (cancelled ones included, like the tournament details page).
+class TournamentCounts extends Equatable {
+  final int players;
+  final int matches;
+
+  const TournamentCounts({required this.players, required this.matches});
+
+  static const TournamentCounts zero = TournamentCounts(players: 0, matches: 0);
+
+  @override
+  List<Object?> get props => [players, matches];
 }

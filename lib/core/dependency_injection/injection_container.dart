@@ -33,8 +33,6 @@ import 'package:ludo_rank/features/players/domain/repositories/player_repository
 
 import 'package:ludo_rank/features/players/presentation/providers/player_provider.dart';
 
-// أضف الـ imports الخاصة بالـ tournament
-
 import 'package:ludo_rank/features/tournaments/data/repositories/tournament_repository_impl.dart';
 import 'package:ludo_rank/features/tournaments/data/data_sources/local/tournament_dao.dart';
 
@@ -59,18 +57,25 @@ import 'package:ludo_rank/features/tournaments/presentation/providers/tournament
 
 final sl = GetIt.instance;
 
-Future<void> initDependencies() async {
+/// Registers every app dependency.
+///
+/// Tests pass an in-memory [database] and turn [preloadSounds] off (there
+/// are no audio plugins in widget tests).
+Future<void> initDependencies({
+  AppDatabase? database,
+  bool preloadSounds = true,
+}) async {
   // Settings (theme, sound) and app-wide sound effects.
   final settings = await AppSettings.load();
   sl.registerSingleton<AppSettings>(settings);
   final soundController = SoundController(settings);
   sl.registerSingleton<SoundController>(soundController);
   // Warm the sound pool in the background so game sounds start on time.
-  unawaited(soundController.preload());
+  if (preloadSounds) unawaited(soundController.preload());
 
   // Database
 
-  sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
+  sl.registerLazySingleton<AppDatabase>(() => database ?? AppDatabase());
   sl.registerLazySingleton<DatabaseCheckpointer>(
     () => DatabaseCheckpointer(() => sl<AppDatabase>().checkpointWal()),
   );
@@ -153,13 +158,6 @@ Future<void> initDependencies() async {
     ),
   );
 
-  // تأكد من وجود هذا السطر الخاص بـ MatchRepository (إذا لم يكن موجوداً)
-  ///sl.registerLazySingleton<MatchRepository>(
-  ///     () => MatchRepositoryImpl(
-  ///sl()
-  ///)
-  ///);
-
   sl.registerLazySingleton<MatchPlayerRepository>(
     () => MatchPlayerRepositoryImpl(sl<MatchPlayerDao>()),
   );
@@ -168,12 +166,6 @@ Future<void> initDependencies() async {
     () => MatchRepositoryImpl(sl<MatchDao>()),
   );
 
-  ///sl.registerLazySingleton<MatchGameService>(
-  ///   () => MatchGameService(
-  /// matchRepository: sl<MatchRepository>(),
-  ///matchPlayerRepository: sl<MatchPlayerRepository>(),
-  ///),
-  ///);
   // Provider
 
   sl.registerFactory<PlayerProvider>(

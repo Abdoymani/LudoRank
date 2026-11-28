@@ -1,6 +1,12 @@
 import 'package:equatable/equatable.dart';
 
 class Player extends Equatable {
+  /// Input limits for the add-player form. Longer names break list
+  /// layouts and are cut on the match board anyway.
+  static const int maxNameLength = 30;
+  static const int maxNicknameLength = 20;
+  static const int maxNotesLength = 200;
+
   final String id;
   final String name;
   final String? nickname;

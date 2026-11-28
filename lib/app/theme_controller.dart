@@ -12,8 +12,6 @@ class ThemeController extends ChangeNotifier {
 
   ThemeMode get themeMode => _themeMode;
 
-  bool get isDarkMode => _themeMode == ThemeMode.dark;
-
   ThemeMode _parseThemeMode(dynamic value) {
     switch (value) {
       case 'light':
@@ -39,13 +37,5 @@ class ThemeController extends ChangeNotifier {
 
     _themeMode = mode;
     notifyListeners();
-  }
-
-  Future<void> toggleTheme() async {
-    final newMode = _themeMode == ThemeMode.dark
-        ? ThemeMode.light
-        : ThemeMode.dark;
-
-    await setThemeMode(newMode);
   }
 }

@@ -12,7 +12,7 @@ extension TournamentStatusExtension on TournamentStatus {
         return "جاهزة";
 
       case TournamentStatus.running:
-        return "جارية";
+        return "شغالة";
 
       case TournamentStatus.finished:
         return "منتهية";

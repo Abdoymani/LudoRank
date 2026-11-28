@@ -11,6 +11,7 @@ import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_standings_provider.dart';
+import 'package:ludo_rank/features/tournaments/presentation/widgets/tournament_card.dart';
 import 'package:ludo_rank/shared/widgets/app_scaffold.dart';
 
 class TournamentDetailsPage extends StatefulWidget {
@@ -189,47 +190,11 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
     }
   }
 
-  String _statusLabel(TournamentStatus status) {
-    switch (status) {
-      case TournamentStatus.draft:
-        return 'مسودة';
-      case TournamentStatus.ready:
-        return 'جاهزة';
-      case TournamentStatus.running:
-        return 'جارية';
-      case TournamentStatus.finished:
-        return 'مكتملة';
-      case TournamentStatus.cancelled:
-        return 'ملغاة';
-      case TournamentStatus.unknown:
-        return 'غير معروفة';
-    }
-  }
-
-  Color _statusColor(TournamentStatus status, ColorScheme colors) {
-    switch (status) {
-      case TournamentStatus.draft:
-        return colors.outline;
-      case TournamentStatus.ready:
-        return colors.primary;
-      case TournamentStatus.running:
-        return Colors.green;
-      case TournamentStatus.finished:
-        return Colors.amber.shade700;
-      case TournamentStatus.cancelled:
-        return colors.error;
-      case TournamentStatus.unknown:
-        return colors.outline;
-    }
-  }
-
   Widget _buildHeader() {
     return ListenableBuilder(
       listenable: tournamentProvider,
       builder: (context, _) {
         final tournament = tournamentProvider.currentTournament;
-        final colors = Theme.of(context).colorScheme;
-
         final status = tournament?.status;
 
         return Card(
@@ -278,27 +243,7 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
                 ),
                 const SizedBox(width: 8),
                 if (status != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _statusColor(
-                        status,
-                        colors,
-                      ).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      _statusLabel(status),
-                      style: TextStyle(
-                        color: _statusColor(status, colors),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  )
+                  TournamentStatusChip(status: status)
                 else if (tournamentProvider.isLoading)
                   const SizedBox(
                     width: 16,

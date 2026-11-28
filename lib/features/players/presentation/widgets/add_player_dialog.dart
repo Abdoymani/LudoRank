@@ -93,6 +93,7 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
               TextFormField(
                 controller: _nameController,
                 autofocus: true,
+                maxLength: Player.maxNameLength,
                 decoration: const InputDecoration(
                   labelText: 'اسم اللاعب',
                   errorMaxLines: 4,
@@ -114,6 +115,7 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
 
               TextFormField(
                 controller: _nicknameController,
+                maxLength: Player.maxNicknameLength,
                 decoration: const InputDecoration(labelText: 'اللقب'),
               ),
 
@@ -121,6 +123,7 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
 
               TextFormField(
                 controller: _notesController,
+                maxLength: Player.maxNotesLength,
                 decoration: const InputDecoration(labelText: 'ملاحظات'),
                 maxLines: 3,
               ),

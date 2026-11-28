@@ -18,6 +18,11 @@ import 'package:ludo_rank/features/match_players/domain/repositories/match_playe
 
 import 'package:ludo_rank/features/players/domain/entities/player.dart';
 import 'package:ludo_rank/features/players/domain/repositories/player_repository.dart';
+import 'package:ludo_rank/features/matches/presentation/seat_colors.dart';
+import 'package:ludo_rank/features/matches/presentation/widgets/match_status_chip.dart';
+import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
+import 'package:ludo_rank/features/tournaments/domain/repositories/tournament_repository.dart';
+import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 
 class TournamentMatchesPage extends StatefulWidget {
   final String tournamentId;
@@ -36,6 +41,15 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
   String? _expandedMatchId;
   final Map<String, List<_FinishedPlayerResult>> _finishedResults = {};
   final Set<String> _loadingResults = {};
+
+  /// Null until loaded. New matches are offered only while it is open.
+  TournamentStatus? _tournamentStatus;
+
+  bool get _canCreateMatches {
+    final status = _tournamentStatus;
+    return status == null || TournamentStatusTransitions.isOpen(status);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -47,8 +61,40 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
     _loadMatches();
   }
 
+  /// Open matches first (started, then not started), then the rest;
+  /// newest first within each group.
+  static List<Match> sortForList(Iterable<Match> matches) {
+    int group(MatchStatus status) => switch (status) {
+      MatchStatus.playing => 0,
+      MatchStatus.pending => 1,
+      _ => 2,
+    };
+
+    return matches.toList()..sort((a, b) {
+      final byGroup = group(a.status).compareTo(group(b.status));
+      if (byGroup != 0) return byGroup;
+      return b.matchNumber.compareTo(a.matchNumber);
+    });
+  }
+
   Future<void> _loadMatches() async {
-    await matchProvider.loadMatches(widget.tournamentId);
+    await Future.wait([
+      matchProvider.loadMatches(widget.tournamentId),
+      _loadTournamentStatus(),
+    ]);
+  }
+
+  Future<void> _loadTournamentStatus() async {
+    try {
+      final tournament = await sl<TournamentRepository>().getTournamentById(
+        widget.tournamentId,
+      );
+      if (!mounted || tournament == null) return;
+      setState(() => _tournamentStatus = tournament.status);
+    } catch (e) {
+      // Keep offering new matches; CreateMatch still refuses closed ones.
+      debugPrint('Tournament status load failed: $e');
+    }
   }
 
   Future<void> _createNewMatch() async {
@@ -148,10 +194,8 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
             seat: matchPlayer.seat,
             rank: matchPlayer.rank,
             points: matchPlayer.points,
-            color: _colorForSeat(
-              seat: matchPlayer.seat,
-              playersCount: match.playersCount,
-            ),
+            color: seatColor(matchPlayer.seat, match.playersCount),
+            colorName: seatColorName(matchPlayer.seat, match.playersCount),
           );
         }),
       );
@@ -181,28 +225,6 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
     }
   }
 
-  Color _colorForSeat({required int seat, required int playersCount}) {
-    // نفس توزيع الألوان المستخدم في المباراة:
-    // لاعبان: أخضر، أزرق.
-    // 3 أو 4 لاعبين: أخضر، أصفر، أزرق، أحمر.
-    if (playersCount == 2) {
-      return seat == 1 ? Colors.green : Colors.blue;
-    }
-
-    switch (seat) {
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.yellow.shade700;
-      case 3:
-        return Colors.blue;
-      case 4:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
   Future<void> _openMatch(Match listed, {bool resumeExisting = false}) async {
     // The list can be older than the database (e.g. the match was started
     // and paused since it loaded). Use the stored status to decide whether
@@ -223,8 +245,7 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
       if (!mounted) return;
 
       final message = switch (match.status) {
-        MatchStatus.playing =>
-          'المباراة بدأت بالفعل. استخدم زر استكمال المباراة.',
+        MatchStatus.playing => 'المباراة بدأت بالفعل. استخدم زر كمّل.',
         MatchStatus.finished => 'هذه المباراة منتهية بالفعل.',
         MatchStatus.cancelled => 'هذه المباراة ملغاة.',
         MatchStatus.pending => 'المباراة لم تبدأ بعد.',
@@ -301,6 +322,13 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'مباريات البطولة',
+      floatingActionButton: _canCreateMatches
+          ? FloatingActionButton.extended(
+              onPressed: _createNewMatch,
+              icon: const Icon(Icons.add),
+              label: const Text('مباراة جديدة'),
+            )
+          : null,
       body: ListenableBuilder(
         listenable: matchProvider,
         builder: (context, _) {
@@ -315,7 +343,7 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
             );
           }
 
-          final matches = matchProvider.matches.reversed.toList();
+          final matches = sortForList(matchProvider.matches);
           if (matches.isEmpty) {
             return RefreshIndicator(
               onRefresh: _refreshMatches,
@@ -341,69 +369,81 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
 
                   const SizedBox(height: 12),
 
-                  const Text(
-                    'قم بإنشاء مباراة جديدة واختار اللاعبين المشاركين فيها.',
+                  Text(
+                    _canCreateMatches
+                        ? 'اعمل مباراة جديدة واختار اللاعبين المشاركين فيها.'
+                        : 'البطولة دي مقفولة، مينفعش تتضاف لها مباريات.',
                     textAlign: TextAlign.center,
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  ElevatedButton.icon(
-                    onPressed: _createNewMatch,
-                    icon: const Icon(Icons.add),
-                    label: const Text('مباراة جديدة'),
                   ),
                 ],
               ),
             );
           }
 
+          final hasError = matchProvider.error != null;
+
           return RefreshIndicator(
             onRefresh: _refreshMatches,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _MatchesHeader(
-                  matchesCount: matches.length,
-                  onAddMatch: _createNewMatch,
-                ),
-
-                const SizedBox(height: 16),
-
-                ...matches.map(
-                  (match) => _MatchCard(
-                    match: match,
-                    expanded: _expandedMatchId == match.id,
-                    loadingResult: _loadingResults.contains(match.id),
-                    results: _finishedResults[match.id] ?? const [],
-                    onTap: () {
-                      if (match.status == MatchStatus.finished) {
-                        _toggleFinishedMatch(match);
-                      } else {
-                        _openMatch(match);
-                      }
-                    },
-                    onResume: match.status == MatchStatus.playing
-                        ? () => _openMatch(match, resumeExisting: true)
-                        : null,
-                    onCancel: CancelMatch.canCancel(match.status)
-                        ? () => _cancelMatch(match)
-                        : null,
-                  ),
-                ),
-
-                if (matchProvider.error != null) ...[
-                  const SizedBox(height: 12),
-
-                  Text(
-                    matchProvider.error!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+            child: ListView.builder(
+              // Room at the bottom so the FAB never covers a button.
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              itemCount: matches.length + 1 + (hasError ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _MatchesHeader(
+                      matchesCount: matches.length,
+                      openCount: matches
+                          .where(
+                            (match) =>
+                                match.status == MatchStatus.playing ||
+                                match.status == MatchStatus.pending,
+                          )
+                          .length,
                     ),
-                  ),
-                ],
-              ],
+                  );
+                }
+
+                if (index > matches.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      matchProvider.error!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  );
+                }
+
+                final match = matches[index - 1];
+
+                return _MatchCard(
+                  key: ValueKey(match.id),
+                  match: match,
+                  expanded: _expandedMatchId == match.id,
+                  loadingResult: _loadingResults.contains(match.id),
+                  results: _finishedResults[match.id] ?? const [],
+                  onTap: () {
+                    if (match.status == MatchStatus.finished) {
+                      _toggleFinishedMatch(match);
+                    } else {
+                      _openMatch(match);
+                    }
+                  },
+                  onResume: match.status == MatchStatus.playing
+                      ? () => _openMatch(match, resumeExisting: true)
+                      : null,
+                  onStart: match.status == MatchStatus.pending
+                      ? () => _openMatch(match)
+                      : null,
+                  onCancel: CancelMatch.canCancel(match.status)
+                      ? () => _cancelMatch(match)
+                      : null,
+                );
+              },
             ),
           );
         },
@@ -414,51 +454,39 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
 
 class _MatchesHeader extends StatelessWidget {
   final int matchesCount;
-  final VoidCallback onAddMatch;
+  final int openCount;
 
-  const _MatchesHeader({required this.matchesCount, required this.onAddMatch});
+  const _MatchesHeader({required this.matchesCount, required this.openCount});
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            Row(
-              children: [
-                const Icon(Icons.sports_esports, size: 32),
+            const Icon(Icons.sports_esports, size: 32),
 
-                const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'مباريات البطولة',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-
-                      const SizedBox(height: 4),
-
-                      Text('عدد المباريات: $matchesCount'),
-                    ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'مباريات البطولة',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                ),
-              ],
-            ),
 
-            const SizedBox(height: 16),
+                  const SizedBox(height: 4),
 
-            ElevatedButton.icon(
-              onPressed: onAddMatch,
-              icon: const Icon(Icons.add),
-              label: const Text('مباراة جديدة'),
+                  Text(
+                    openCount > 0
+                        ? 'عدد المباريات: $matchesCount • مفتوحة: $openCount'
+                        : 'عدد المباريات: $matchesCount',
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -474,15 +502,18 @@ class _MatchCard extends StatelessWidget {
   final bool loadingResult;
   final List<_FinishedPlayerResult> results;
   final VoidCallback? onResume;
+  final VoidCallback? onStart;
   final VoidCallback? onCancel;
 
   const _MatchCard({
+    super.key,
     required this.match,
     required this.onTap,
     required this.expanded,
     required this.loadingResult,
     required this.results,
     required this.onResume,
+    required this.onStart,
     required this.onCancel,
   });
 
@@ -527,7 +558,7 @@ class _MatchCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      _MatchStatusChip(status: match.status),
+                      MatchStatusChip(status: match.status),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -563,7 +594,7 @@ class _MatchCard extends StatelessWidget {
               ),
             ),
           ),
-          if (onResume != null || onCancel != null)
+          if (onResume != null || onStart != null || onCancel != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Wrap(
@@ -580,11 +611,17 @@ class _MatchCard extends StatelessWidget {
                       icon: const Icon(Icons.cancel_outlined),
                       label: const Text('إلغاء'),
                     ),
-                  if (match.status == MatchStatus.playing && onResume != null)
+                  if (onStart != null)
                     OutlinedButton.icon(
+                      onPressed: onStart,
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('ابدأ'),
+                    ),
+                  if (onResume != null)
+                    FilledButton.icon(
                       onPressed: onResume,
                       icon: const Icon(Icons.play_arrow_rounded),
-                      label: const Text('استكمال المباراة'),
+                      label: const Text('كمّل'),
                     ),
                 ],
               ),
@@ -651,9 +688,7 @@ class _MatchCard extends StatelessWidget {
                   backgroundColor: result.color,
                   child: Icon(
                     Icons.person,
-                    color: result.color.computeLuminance() > 0.5
-                        ? Colors.black87
-                        : Colors.white,
+                    color: onSeatColor(result.color),
                     size: 19,
                   ),
                 ),
@@ -669,7 +704,7 @@ class _MatchCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'اللون: ${_colorName(result.color)}',
+                        'اللون: ${result.colorName}',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
@@ -694,44 +729,6 @@ class _MatchCard extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  String _colorName(Color color) {
-    if (color == Colors.green) return 'أخضر';
-    if (color == Colors.blue) return 'أزرق';
-    if (color == Colors.red) return 'أحمر';
-    if (color == Colors.yellow.shade700) return 'أصفر';
-    return 'غير محدد';
-  }
-}
-
-class _MatchStatusChip extends StatelessWidget {
-  final MatchStatus status;
-
-  const _MatchStatusChip({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(label: Text(_statusText(status)));
-  }
-
-  String _statusText(MatchStatus status) {
-    switch (status) {
-      case MatchStatus.pending:
-        return 'معلقة';
-
-      case MatchStatus.playing:
-        return 'جارية';
-
-      case MatchStatus.finished:
-        return 'منتهية';
-
-      case MatchStatus.cancelled:
-        return 'ملغاة';
-
-      case MatchStatus.unknown:
-        return 'غير معروفة';
-    }
   }
 }
 
@@ -783,6 +780,7 @@ class _FinishedPlayerResult {
   final int? rank;
   final int points;
   final Color color;
+  final String colorName;
 
   const _FinishedPlayerResult({
     required this.name,
@@ -790,6 +788,7 @@ class _FinishedPlayerResult {
     required this.rank,
     required this.points,
     required this.color,
+    required this.colorName,
   });
 }
 

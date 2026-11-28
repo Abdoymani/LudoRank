@@ -6,14 +6,7 @@ class DashboardSummaryModel extends DashboardSummary {
     required super.tournamentsCount,
     required super.matchesCount,
     required super.finishedTournamentsCount,
+    super.lastTournament,
+    super.resumableMatch,
   });
-
-  factory DashboardSummaryModel.fromEntity(DashboardSummary entity) {
-    return DashboardSummaryModel(
-      playersCount: entity.playersCount,
-      tournamentsCount: entity.tournamentsCount,
-      matchesCount: entity.matchesCount,
-      finishedTournamentsCount: entity.finishedTournamentsCount,
-    );
-  }
 }

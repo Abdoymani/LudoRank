@@ -74,4 +74,30 @@ void main() {
     expect(find.byType(AddPlayerDialog), findsNothing);
     expect(repository.added.single.name, 'محمود');
   });
+
+  testWidgets('name, nickname and notes are capped at their max length', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => PlayerProvider(_Repository()),
+        child: const MaterialApp(home: Scaffold(body: AddPlayerDialog())),
+      ),
+    );
+
+    final fields = find.byType(TextFormField);
+    final limits = [
+      Player.maxNameLength,
+      Player.maxNicknameLength,
+      Player.maxNotesLength,
+    ];
+    for (var i = 0; i < limits.length; i++) {
+      await tester.enterText(fields.at(i), 'ا' * (limits[i] + 15));
+      await tester.pump();
+      final field = tester.widget<EditableText>(
+        find.descendant(of: fields.at(i), matching: find.byType(EditableText)),
+      );
+      expect(field.controller.text.length, limits[i]);
+    }
+  });
 }
