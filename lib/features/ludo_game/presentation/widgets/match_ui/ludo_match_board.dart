@@ -713,11 +713,13 @@ class _LudoMatchBoardState extends State<LudoMatchBoard>
       totalSteps,
     );
 
-    if (currentStep <= _lastSoundStep) return;
+    // The last landing is the move's own sound (a step, or enter/capture/
+    // home/win), played when the move is committed: never both at once.
+    if (currentStep <= _lastSoundStep || currentStep >= totalSteps) return;
 
     _lastSoundStep = currentStep;
 
-    widget.sounds?.play(GameSound.step);
+    widget.sounds?.play(currentStep.isOdd ? GameSound.step : GameSound.stepAlt);
   }
 
   LudoPath _pathFor(LudoPlayerColor color) {
