@@ -45,10 +45,12 @@ class HomeDao extends DatabaseAccessor<AppDatabase> with _$HomeDaoMixin {
     return row.read(tournaments.id.count()) ?? 0;
   }
 
-  /// The newest tournament (same order as the tournaments list).
+  /// The tournament being played (the newest running one), else the
+  /// newest tournament. A new empty draft never hides the running one.
   Future<Tournament?> getLastTournament() {
     return (select(tournaments)
           ..orderBy([
+            (tbl) => OrderingTerm.desc(tbl.status.equals('running')),
             (tbl) => OrderingTerm.desc(tbl.createdAt),
             (tbl) => OrderingTerm.desc(tbl.rowId),
           ])

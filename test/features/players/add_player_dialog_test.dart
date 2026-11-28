@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ludo_rank/features/players/domain/entities/player.dart';
+import 'package:ludo_rank/features/players/domain/entities/player_stats.dart';
 import 'package:ludo_rank/features/players/domain/exceptions/duplicate_player_name_exception.dart';
 import 'package:ludo_rank/features/players/domain/repositories/player_repository.dart';
 import 'package:ludo_rank/features/players/presentation/providers/player_provider.dart';
@@ -27,6 +28,9 @@ class _Repository implements PlayerRepository {
 
   @override
   Future<void> deletePlayer(String id) async {}
+
+  @override
+  Future<Map<String, PlayerStats>> getPlayerStats() async => const {};
 }
 
 void main() {

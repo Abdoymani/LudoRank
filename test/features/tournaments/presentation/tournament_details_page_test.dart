@@ -68,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('منتهية'), findsOneWidget);
-    expect(find.text('عرض المباريات'), findsOneWidget);
+    expect(find.text('المباريات'), findsOneWidget);
     expect(find.text('إنهاء البطولة'), findsNothing);
   });
 }

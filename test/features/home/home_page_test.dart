@@ -7,8 +7,6 @@ import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
 import 'package:ludo_rank/features/matches/presentation/pages/tournament_matches_page.dart';
 import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
 import 'package:ludo_rank/features/tournaments/presentation/pages/tournament_details_page.dart';
-import 'package:ludo_rank/features/tournaments/presentation/pages/tournaments_page.dart';
-import 'package:ludo_rank/features/tournaments/presentation/widgets/tournament_card.dart';
 
 import '../../helpers/test_app.dart';
 
@@ -145,20 +143,31 @@ void main() {
     expect(find.byType(TournamentMatchesPage), findsOneWidget);
   });
 
-  testWidgets('the finished card opens the finished tournaments', (
+  testWidgets('a paused match in the matches list opens the game', (
     tester,
   ) async {
     await seed();
     await app.pump(tester);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('بطولات منتهية'));
+    await tester.tap(find.text('المباريات'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('مباراة رقم 2'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final game = tester.widget<MatchGamePage>(find.byType(MatchGamePage));
+    expect(game.resumeExisting, isTrue);
+  });
+
+  testWidgets('home shows the running tournament, not a newer draft', (
+    tester,
+  ) async {
+    await seed();
+    await app.addTournament('مسودة جديدة', createdAt: DateTime(2030, 1, 1));
+    await app.pump(tester);
     await tester.pumpAndSettle();
 
-    expect(find.byType(TournamentsPage), findsOneWidget);
-    final names = tester
-        .widgetList<TournamentCard>(find.byType(TournamentCard))
-        .map((card) => card.tournament.name);
-    expect(names, ['بطولة الصيف']);
+    expect(find.text('مسودة جديدة'), findsNothing);
   });
 }

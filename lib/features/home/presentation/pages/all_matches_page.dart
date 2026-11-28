@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/features/home/domain/entities/dashboard_summary.dart';
 import 'package:ludo_rank/features/home/domain/repositories/home_repository.dart';
+import 'package:ludo_rank/features/home/presentation/match_resumer.dart';
+import 'package:ludo_rank/features/matches/domain/entities/match_status.dart';
 import 'package:ludo_rank/features/matches/presentation/pages/tournament_matches_page.dart';
 import 'package:ludo_rank/features/matches/presentation/widgets/match_status_chip.dart';
 import 'package:ludo_rank/shared/widgets/app_empty_state.dart';
@@ -41,6 +43,17 @@ class _AllMatchesPageState extends State<AllMatchesPage> {
       if (!mounted) return;
       setState(() => _error = e.toString());
     }
+  }
+
+  /// A paused match opens straight into the game; any other match opens
+  /// its tournament's list (start, results, cancel live there).
+  Future<void> _openMatch(MatchOverview match) async {
+    if (match.status == MatchStatus.playing) {
+      await resumeMatch(context, match);
+      if (mounted) await _load();
+      return;
+    }
+    await _openTournamentMatches(match);
   }
 
   Future<void> _openTournamentMatches(MatchOverview match) async {
@@ -86,7 +99,7 @@ class _AllMatchesPageState extends State<AllMatchesPage> {
             key: ValueKey(match.matchId),
             margin: const EdgeInsets.only(bottom: 10),
             child: ListTile(
-              onTap: () => _openTournamentMatches(match),
+              onTap: () => _openMatch(match),
               leading: CircleAvatar(
                 child: Text(
                   match.matchNumber > 0 ? '${match.matchNumber}' : '#',

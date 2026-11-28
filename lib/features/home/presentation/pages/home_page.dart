@@ -10,6 +10,7 @@ import 'package:ludo_rank/features/home/domain/entities/dashboard_summary.dart';
 import 'package:ludo_rank/features/home/presentation/match_resumer.dart';
 import 'package:ludo_rank/features/home/presentation/providers/home_provider.dart';
 import 'package:ludo_rank/features/home/presentation/widgets/dashboard_card.dart';
+import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
 import 'package:ludo_rank/features/tournaments/presentation/widgets/create_tournament_dialog.dart';
 import 'package:ludo_rank/features/tournaments/presentation/widgets/tournament_card.dart';
 import 'package:ludo_rank/shared/widgets/app_error_widget.dart';
@@ -98,57 +99,39 @@ class _HomePageState extends State<HomePage> {
 
           const SizedBox(height: 24),
 
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-
-              final crossAxisCount = width >= 1000
-                  ? 4
-                  : width >= 650
-                  ? 3
-                  : 2;
-
-              final childAspectRatio = width >= 650 ? 1.35 : 0.9;
-
-              return GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: childAspectRatio,
-                children: [
-                  DashboardCard(
-                    icon: Icons.people,
-                    title: 'اللاعبون',
-                    value: provider.playersCount,
-                    onTap: () => _open(AppRoutes.players),
-                  ),
-                  DashboardCard(
-                    icon: Icons.emoji_events,
-                    title: 'البطولات',
-                    value: provider.tournamentsCount,
-                    onTap: () => _open(AppRoutes.tournaments),
-                  ),
-                  DashboardCard(
-                    icon: Icons.sports_esports,
-                    title: 'المباريات',
-                    value: provider.matchesCount,
-                    onTap: () => _open(AppRoutes.matches),
-                  ),
-                  DashboardCard(
-                    icon: Icons.workspace_premium,
-                    title: 'بطولات منتهية',
-                    value: provider.finishedTournamentsCount,
-                    onTap: () =>
-                        _open('${AppRoutes.tournaments}?status=finished'),
-                  ),
-                ],
-              );
-            },
+          // One short row of counts that open their lists.
+          Row(
+            children: [
+              Expanded(
+                child: DashboardCard(
+                  icon: Icons.people,
+                  title: 'اللاعبون',
+                  value: provider.playersCount,
+                  onTap: () => _open(AppRoutes.players),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DashboardCard(
+                  icon: Icons.emoji_events,
+                  title: 'البطولات',
+                  value: provider.tournamentsCount,
+                  onTap: () => _open(AppRoutes.tournaments),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DashboardCard(
+                  icon: Icons.sports_esports,
+                  title: 'المباريات',
+                  value: provider.matchesCount,
+                  onTap: () => _open(AppRoutes.matches),
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           _LastTournamentCard(
             summary: dashboard?.lastTournament,
@@ -235,7 +218,12 @@ class _LastTournamentCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('آخر بطولة', style: theme.textTheme.titleLarge),
+            Text(
+              summary?.tournament.status == TournamentStatus.running
+                  ? 'البطولة الحالية'
+                  : 'آخر بطولة',
+              style: theme.textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             if (summary == null) ...[
               const Text('لسه مفيش بطولات.'),

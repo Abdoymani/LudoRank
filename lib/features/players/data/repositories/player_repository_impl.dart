@@ -1,3 +1,4 @@
+import 'package:ludo_rank/features/players/domain/entities/player_stats.dart';
 import 'package:drift/isolate.dart' show DriftRemoteException;
 import 'package:drift/native.dart';
 import 'package:ludo_rank/features/players/data/data_sources/local/player_dao.dart';
@@ -39,6 +40,19 @@ class PlayerRepositoryImpl implements PlayerRepository {
     final model = PlayerModel.fromEntity(player.copyWith(name: name));
 
     await _rejectingDuplicates(() => dao.insertPlayer(model.toCompanion()));
+  }
+
+  @override
+  Future<Map<String, PlayerStats>> getPlayerStats() async {
+    final rows = await dao.getPlayerStats();
+    return {
+      for (final entry in rows.entries)
+        entry.key: PlayerStats(
+          matches: entry.value.matches,
+          wins: entry.value.wins,
+          points: entry.value.points,
+        ),
+    };
   }
 
   @override

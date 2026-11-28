@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ludo_rank/features/players/domain/exceptions/duplicate_player_name_exception.dart';
 
 import '../../domain/entities/player.dart';
+import '../../domain/entities/player_stats.dart';
 import '../../domain/repositories/player_repository.dart';
 
 class PlayerProvider extends ChangeNotifier {
@@ -16,6 +17,12 @@ class PlayerProvider extends ChangeNotifier {
   // ============================================================
 
   List<Player> get players => List.unmodifiable(_players);
+
+  Map<String, PlayerStats> _stats = const {};
+
+  /// [player]'s record over finished matches (zeros when none).
+  PlayerStats statsFor(String playerId) =>
+      _stats[playerId] ?? PlayerStats.empty;
 
   bool _isLoading = false;
 
@@ -57,6 +64,14 @@ class PlayerProvider extends ChangeNotifier {
       _players
         ..clear()
         ..addAll(result);
+
+      try {
+        _stats = await repository.getPlayerStats();
+      } catch (e) {
+        // Stats are extra: the list still shows without them.
+        debugPrint('Player stats failed: $e');
+        _stats = const {};
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -108,9 +123,11 @@ class PlayerProvider extends ChangeNotifier {
 
       await loadPlayers();
     } catch (e) {
-      _error = e.toString();
-
       _isLoading = false;
+
+      if (e is! DuplicatePlayerNameException) {
+        _error = 'تعذر حفظ اللاعب، حاول مرة أخرى';
+      }
 
       notifyListeners();
 
