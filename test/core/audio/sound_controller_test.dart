@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ludo_rank/app/theme_controller.dart';
+import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
 import 'package:ludo_rank/core/settings/app_settings.dart';
 
@@ -34,6 +38,54 @@ void main() {
 
       final restarted = SoundController(await AppSettings.load());
       expect(restarted.enabled, isFalse);
+    });
+
+    test('every sound has its generated WAV under assets/', () {
+      for (final sound in GameSound.values) {
+        final file = File('assets/${sound.asset}');
+        expect(file.existsSync(), isTrue, reason: sound.asset);
+        final bytes = file.readAsBytesSync();
+        // RIFF/WAVE, mono, 16-bit.
+        expect(String.fromCharCodes(bytes.sublist(8, 12)), 'WAVE');
+        expect(bytes[22], 1, reason: '${sound.asset} is mono');
+        expect(bytes[34], 16, reason: '${sound.asset} is 16-bit');
+        expect(bytes.length, lessThan(80 * 1024));
+      }
+    });
+
+    test('vibrations follow the sound switch', () async {
+      final calls = <Object?>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'HapticFeedback.vibrate') {
+              calls.add(call.arguments);
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      SharedPreferences.setMockInitialValues({});
+      final controller = SoundController(await AppSettings.load());
+      controller.haptic(GameHaptic.light);
+      controller.haptic(GameHaptic.medium);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, [
+        'HapticFeedbackType.lightImpact',
+        'HapticFeedbackType.mediumImpact',
+      ]);
+
+      await controller.setEnabled(false);
+      controller.haptic(GameHaptic.medium);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, hasLength(2));
+    });
+
+    test('preload loads every step player, one player for other sounds', () {
+      expect(SoundController.preloadedPlayersFor(GameSound.step), 3);
+      expect(SoundController.preloadedPlayersFor(GameSound.dice), 1);
     });
 
     test('the effects context never takes audio focus from other apps', () {

@@ -5,6 +5,9 @@ import 'package:ludo_rank/shared/widgets/sound_toggle_button.dart';
 import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
+import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/available_rolls.dart';
+import 'package:ludo_rank/features/ludo_game/domain/models/turn_state.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/move_option.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/ludo_game_result_overlay.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/ludo_match_board.dart';
@@ -14,6 +17,7 @@ import 'package:ludo_rank/features/match_players/domain/entities/match_player.da
 import 'dart:async';
 
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_die_face.dart';
+import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_seat_layout.dart';
 import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 
 class MatchGamePage extends StatefulWidget {
@@ -36,6 +40,9 @@ class MatchGamePage extends StatefulWidget {
 }
 
 class _MatchGamePageState extends State<MatchGamePage> {
+  /// Largest text scale used inside the match screen.
+  static const double maxTextScale = 1.3;
+
   late final MatchGameProvider provider;
 
   @override
@@ -156,167 +163,266 @@ class _MatchGamePageState extends State<MatchGamePage> {
       setState(() => _leaving = false);
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('تعذر إلغاء المباراة: $e')));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              cancel ? 'تعذر إلغاء المباراة: $e' : 'تعذر إيقاف المباراة: $e',
+            ),
+          ),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // No Consumer around the page: each part below listens to just the
+    // values it shows (context.select), so a roll or a move rebuilds the
+    // card and the board that changed, not the whole Scaffold.
     return ChangeNotifierProvider<MatchGameProvider>.value(
       value: provider,
-      child: Consumer<MatchGameProvider>(
-        builder: (context, gameProvider, _) {
-          return PopScope<Object?>(
-            canPop: _canPopFreely,
-            onPopInvokedWithResult: (didPop, _) {
-              if (!didPop) _handleBack();
-            },
-            child: Scaffold(
-              appBar: AppBar(
-                toolbarHeight: 48,
-                centerTitle: true,
-                title: const Text(
-                  'LudoRank',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                ),
-                leading: IconButton(
-                  onPressed: gameProvider.isLoading || _leaving
-                      ? null
-                      : _handleBack,
-                  tooltip: 'رجوع',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-                actions: <Widget>[
-                  if (gameProvider.isGameFinished && !gameProvider.isFinished)
-                    IconButton(
-                      onPressed: gameProvider.isLoading
-                          ? null
-                          : gameProvider.retryFinishPersistence,
-                      tooltip: 'إعادة حفظ النتيجة',
-                      icon: const Icon(Icons.sync),
-                    )
-                  else
-                    const SoundToggleButton(),
-                ],
-                bottom: const PreferredSize(
-                  preferredSize: Size.fromHeight(1),
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Color(0xFF51465E),
-                  ),
-                ),
+      // A bigger system font is honoured up to 1.3x here: beyond that the
+      // cards would eat the board on a phone.
+      child: MediaQuery.withClampedTextScaling(
+        maxScaleFactor: maxTextScale,
+        child: _MatchPopGuard(
+          onBack: _handleBack,
+          child: Scaffold(
+            appBar: AppBar(
+              toolbarHeight: 48,
+              centerTitle: true,
+              title: const Text(
+                'LudoRank',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
               ),
-              body: SafeArea(
-                top: false,
-                child: Stack(
-                  children: <Widget>[
-                    _LiveMatchLayout(
-                      provider: gameProvider,
-                      onTokenTap: _onTokenTap,
-                      onMove: _executeMove,
-                    ),
-                    if (gameProvider.rollNotice != null)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Center(
-                            child: _RollNoticeBanner(
-                              notice: gameProvider.rollNotice!,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (gameProvider.error != null)
-                      Positioned(
-                        left: 10,
-                        right: 10,
-                        bottom: 8,
-                        child: _ErrorBanner(
-                          message: gameProvider.error!,
-                          onClose: gameProvider.clearError,
-                        ),
-                      ),
-                    if (gameProvider.isGameFinished)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          ignoring: gameProvider.isLoading,
-                          child: LudoGameResultOverlay(
-                            players: gameProvider.completedPlayers,
-                            playerNames: widget.playerNames,
-                            isSaved: gameProvider.isFinished,
-                            isLoading: gameProvider.isLoading,
-                            onRetry: gameProvider.retryFinishPersistence,
-                            onClose: gameProvider.isFinished
-                                ? () => Navigator.pop(context, true)
-                                : null,
-                            gameResult: gameProvider.result,
-                            matchPlayers:
-                                gameProvider.session?.matchPlayers ??
-                                const <MatchPlayer>[],
-                            gamePlayers: gameProvider.players,
-                          ),
-                        ),
-                      ),
-                  ],
+              leading: _BackButton(leaving: _leaving, onBack: _handleBack),
+              actions: const <Widget>[_AppBarAction()],
+              bottom: const PreferredSize(
+                preferredSize: Size.fromHeight(1),
+                child: Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFF51465E),
                 ),
               ),
             ),
-          );
-        },
+            body: SafeArea(
+              top: false,
+              child: Stack(
+                children: <Widget>[
+                  _LiveMatchLayout(
+                    onTokenTap: _onTokenTap,
+                    onMove: _executeMove,
+                  ),
+                  const _RollNoticeLayer(),
+                  const _ErrorLayer(),
+                  _ResultLayer(
+                    playerNames: widget.playerNames,
+                    onClose: () => Navigator.pop(context, true),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MatchPopGuard extends StatelessWidget {
+  final VoidCallback onBack;
+  final Widget child;
+
+  const _MatchPopGuard({required this.onBack, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final canPop = context.select<MatchGameProvider, bool>(
+      (p) => p.isGameFinished && p.isFinished,
+    );
+    return PopScope<Object?>(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onBack();
+      },
+      child: child,
+    );
+  }
+}
+
+class _BackButton extends StatelessWidget {
+  final bool leaving;
+  final VoidCallback onBack;
+
+  const _BackButton({required this.leaving, required this.onBack});
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = context.select<MatchGameProvider, bool>((p) => p.isLoading);
+    return IconButton(
+      onPressed: loading || leaving ? null : onBack,
+      tooltip: 'رجوع',
+      icon: const Icon(Icons.arrow_back_rounded),
+    );
+  }
+}
+
+class _AppBarAction extends StatelessWidget {
+  const _AppBarAction();
+
+  @override
+  Widget build(BuildContext context) {
+    final (needsRetry, loading) = context
+        .select<MatchGameProvider, (bool, bool)>(
+          (p) => (p.isGameFinished && !p.isFinished, p.isLoading),
+        );
+    if (!needsRetry) return const SoundToggleButton();
+    return IconButton(
+      onPressed: loading
+          ? null
+          : context.read<MatchGameProvider>().retryFinishPersistence,
+      tooltip: 'إعادة حفظ النتيجة',
+      icon: const Icon(Icons.sync),
+    );
+  }
+}
+
+class _RollNoticeLayer extends StatelessWidget {
+  const _RollNoticeLayer();
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = context.select<MatchGameProvider, RollNotice?>(
+      (p) => p.rollNotice,
+    );
+    if (notice == null) return const SizedBox.shrink();
+
+    // A notice about a top-row player's roll faces that player.
+    var facesFarSide = false;
+    for (final player in context.read<MatchGameProvider>().players) {
+      if (player.playerId == notice.playerId) {
+        facesFarSide = MatchSeatLayout.facesFarSide(player.color);
+      }
+    }
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Center(
+          child: RotatedBox(
+            quarterTurns: facesFarSide ? 2 : 0,
+            child: _RollNoticeBanner(notice: notice),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorLayer extends StatelessWidget {
+  const _ErrorLayer();
+
+  @override
+  Widget build(BuildContext context) {
+    final error = context.select<MatchGameProvider, String?>((p) => p.error);
+    if (error == null) return const SizedBox.shrink();
+    return Positioned(
+      left: 10,
+      right: 10,
+      bottom: 8,
+      child: _ErrorBanner(
+        message: error,
+        onClose: context.read<MatchGameProvider>().clearError,
+      ),
+    );
+  }
+}
+
+class _ResultLayer extends StatelessWidget {
+  final Map<String, String> playerNames;
+  final VoidCallback onClose;
+
+  const _ResultLayer({required this.playerNames, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    // completedPlayers is filled exactly when the match becomes finished,
+    // so the status flags are enough to know when to rebuild.
+    final (finished, saved, loading) = context
+        .select<MatchGameProvider, (bool, bool, bool)>(
+          (p) => (p.isGameFinished, p.isFinished, p.isLoading),
+        );
+    if (!finished) return const SizedBox.shrink();
+
+    final provider = context.read<MatchGameProvider>();
+    return Positioned.fill(
+      child: IgnorePointer(
+        ignoring: loading,
+        child: LudoGameResultOverlay(
+          players: provider.completedPlayers,
+          playerNames: playerNames,
+          isSaved: saved,
+          isLoading: loading,
+          onRetry: provider.retryFinishPersistence,
+          onClose: saved ? onClose : null,
+          gameResult: provider.result,
+          matchPlayers: provider.session?.matchPlayers ?? const <MatchPlayer>[],
+          gamePlayers: provider.players,
+          sounds: provider.sounds,
+        ),
       ),
     );
   }
 }
 
 class _LiveMatchLayout extends StatelessWidget {
-  final MatchGameProvider provider;
   final ValueChanged<LudoToken> onTokenTap;
   final Future<void> Function(MoveOption) onMove;
-  const _LiveMatchLayout({
-    required this.provider,
-    required this.onTokenTap,
-    required this.onMove,
-  });
+
+  const _LiveMatchLayout({required this.onTokenTap, required this.onMove});
 
   @override
   Widget build(BuildContext context) {
-    final players = provider.players;
-    final currentPlayer = provider.currentPlayer;
+    // Only the seating changes this layout: which colours play, and
+    // whether the match is loaded. Turns and moves rebuild the parts.
+    final (loaded, error, colors) = context
+        .select<MatchGameProvider, (bool, String?, String)>(
+          (p) => (
+            p.players.isNotEmpty && p.currentPlayer != null,
+            p.players.isEmpty ? p.error : null,
+            p.players.map((player) => player.color.name).join(','),
+          ),
+        );
 
-    if (players.isEmpty || currentPlayer == null) {
+    if (!loaded) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            provider.error ?? 'جارٍ تحميل المباراة...',
+            error ?? 'جارٍ تحميل المباراة...',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ),
       );
     }
-    final playersByColor = <LudoPlayerColor, LudoPlayer>{
-      for (final player in players) player.color: player,
-    };
 
-    final green = playersByColor[LudoPlayerColor.green];
-    final yellow = playersByColor[LudoPlayerColor.yellow];
-    final red = playersByColor[LudoPlayerColor.red];
-    final blue = playersByColor[LudoPlayerColor.blue];
+    bool plays(LudoPlayerColor color) => colors.split(',').contains(color.name);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final shortScreen = constraints.maxHeight < 630;
-        final activeCardHeight = shortScreen ? 110.0 : 126.0;
-        final inactiveCardHeight = shortScreen ? 34.0 : 42.0;
+        // Card heights follow the (clamped) text size instead of fixed
+        // numbers, so a bigger font never pushes text out of a card.
+        final textScaler = MediaQuery.textScalerOf(context);
+        final heights = (
+          active: LudoMatchPlayerSection.activeHeightFor(textScaler),
+          inactive: LudoMatchPlayerSection.inactiveHeightFor(textScaler),
+        );
         final rowGap = shortScreen ? 4.0 : 6.0;
         final sidePadding = constraints.maxWidth < 360 ? 8.0 : 12.0;
 
-        final topHasPlayers = green != null || yellow != null;
-        final bottomHasPlayers = red != null || blue != null;
-
-        final topHeight = topHasPlayers ? activeCardHeight : 0.0;
-        final bottomHeight = bottomHasPlayers ? activeCardHeight : 0.0;
+        final topHasPlayers = MatchSeatLayout.topRow.any(plays);
+        final bottomHasPlayers = MatchSeatLayout.bottomRow.any(plays);
 
         return Center(
           child: ConstrainedBox(
@@ -325,15 +431,15 @@ class _LiveMatchLayout extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(sidePadding, 5, sidePadding, 5),
               child: Column(
                 children: <Widget>[
-                  if (topHeight > 0) ...<Widget>[
+                  if (topHasPlayers) ...<Widget>[
                     SizedBox(
-                      height: topHeight,
+                      height: heights.active,
                       child: _buildHomeSideRow(
-                        left: green,
-                        right: yellow,
-                        currentPlayer: currentPlayer,
-                        activeCardHeight: activeCardHeight,
-                        inactiveCardHeight: inactiveCardHeight,
+                        colors: MatchSeatLayout.topRow,
+                        facesFarSide: true,
+                        plays: plays,
+                        activeHeight: heights.active,
+                        inactiveHeight: heights.inactive,
                       ),
                     ),
                     SizedBox(height: rowGap),
@@ -350,43 +456,25 @@ class _LiveMatchLayout extends StatelessWidget {
 
                           return SizedBox.square(
                             dimension: side,
-                            child: LudoMatchBoard(
-                              players: players,
-                              currentPlayerId: currentPlayer.playerId,
-                              availableMoves: provider.availableMoves,
-                              selectedTokenId: provider.selectedTokenId,
-                              selectedRollSequence:
-                                  provider.selectedRollSequence,
-                              pendingAutoMove: provider.isSnapshotSaveBlocked
-                                  ? null
-                                  : provider.pendingAutoMove,
+                            child: _BoardSlot(
                               onTokenTap: onTokenTap,
-                              legalMoveDestinations:
-                                  provider.selectedMoveDestinations,
-                              rollValueForMove: provider.rollValueForMove,
-                              onMoveTap: onMove,
-
-                              // الرميات التي تناسب التوكن المحدد فقط.
-                              selectableRolls: provider.selectableRolls,
-                              onAvailableRollTap:
-                                  provider.handleAvailableRollTap,
-                              sounds: provider.sounds,
+                              onMove: onMove,
                             ),
                           );
                         },
                       ),
                     ),
                   ),
-                  if (bottomHeight > 0) ...<Widget>[
+                  if (bottomHasPlayers) ...<Widget>[
                     SizedBox(height: rowGap),
                     SizedBox(
-                      height: bottomHeight,
+                      height: heights.active,
                       child: _buildHomeSideRow(
-                        left: red,
-                        right: blue,
-                        currentPlayer: currentPlayer,
-                        activeCardHeight: activeCardHeight,
-                        inactiveCardHeight: inactiveCardHeight,
+                        colors: MatchSeatLayout.bottomRow,
+                        facesFarSide: false,
+                        plays: plays,
+                        activeHeight: heights.active,
+                        inactiveHeight: heights.inactive,
                       ),
                     ),
                   ],
@@ -402,76 +490,244 @@ class _LiveMatchLayout extends StatelessWidget {
   /// The two slots follow the physical homes and never reorder the colors.
   /// LTR slots preserve green/yellow and red/blue board-side positioning;
   /// each player's own contents stay RTL Arabic.
+  ///
+  /// [facesFarSide] is the row above the board: its cards are turned 180°
+  /// so those players read them from their side ([MatchSeatLayout]).
   Widget _buildHomeSideRow({
-    required LudoPlayer? left,
-    required LudoPlayer? right,
-    required LudoPlayer currentPlayer,
-    required double activeCardHeight,
-    required double inactiveCardHeight,
+    required List<LudoPlayerColor> colors,
+    required bool facesFarSide,
+    required bool Function(LudoPlayerColor) plays,
+    required double activeHeight,
+    required double inactiveHeight,
   }) {
+    Widget slot(LudoPlayerColor color) {
+      if (!plays(color)) return const SizedBox.shrink();
+      return _PlayerSlot(
+        color: color,
+        facesFarSide: facesFarSide,
+        activeHeight: activeHeight,
+        inactiveHeight: inactiveHeight,
+      );
+    }
+
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Row(
         children: <Widget>[
-          Expanded(
-            child: _buildPlayerSlot(
-              left,
-              currentPlayer,
-              activeCardHeight,
-              inactiveCardHeight,
-            ),
-          ),
+          Expanded(child: slot(colors[0])),
           const SizedBox(width: 7),
-          Expanded(
-            child: _buildPlayerSlot(
-              right,
-              currentPlayer,
-              activeCardHeight,
-              inactiveCardHeight,
-            ),
-          ),
+          Expanded(child: slot(colors[1])),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPlayerSlot(
-    LudoPlayer? player,
-    LudoPlayer currentPlayer,
-    double activeCardHeight,
-    double inactiveCardHeight,
-  ) {
-    if (player == null) return const SizedBox.shrink();
+/// One player's card. Rebuilds only when what this card shows changes:
+/// a waiting player's card ignores the other players' rolls and moves.
+class _PlayerSlot extends StatelessWidget {
+  final LudoPlayerColor color;
+  final bool facesFarSide;
+  final double activeHeight;
+  final double inactiveHeight;
 
-    final isCurrent = player.playerId == currentPlayer.playerId;
+  const _PlayerSlot({
+    required this.color,
+    required this.facesFarSide,
+    required this.activeHeight,
+    required this.inactiveHeight,
+  });
 
+  @override
+  Widget build(BuildContext context) {
+    final card = context.select<MatchGameProvider, _CardData?>((p) {
+      LudoPlayer? player;
+      for (final candidate in p.players) {
+        if (candidate.color == color) player = candidate;
+      }
+      if (player == null) return null;
+
+      // While the die tumbles, the roller's card stays the active one with
+      // their pre-roll turn, even if the roll already passed the turn.
+      final dice = p.diceRoll;
+      final shownCurrent = dice?.playerId ?? p.currentPlayerId;
+      final isCurrent = player.playerId == shownCurrent;
+      if (!isCurrent) return _CardData.waiting(player);
+
+      if (dice != null) {
+        return _CardData(
+          player: player,
+          isCurrent: true,
+          turnState: dice.turnStateBefore,
+          availableRolls: const AvailableRolls(),
+          canRoll: false,
+          selectedRollSequence: null,
+          dice: dice,
+        );
+      }
+
+      return _CardData(
+        player: player,
+        isCurrent: true,
+        turnState: p.turnState,
+        availableRolls: p.availableRolls,
+        canRoll: p.canRollDice,
+        selectedRollSequence: p.selectedRollSequence,
+      );
+    });
+    if (card == null) return const SizedBox.shrink();
+
+    final provider = context.read<MatchGameProvider>();
+    final height = card.isCurrent ? activeHeight : inactiveHeight;
+
+    // A card that grows or shrinks with the turn stays against the board.
     return Align(
-      alignment: Alignment.center,
+      alignment: facesFarSide ? Alignment.bottomCenter : Alignment.topCenter,
       child: SizedBox(
         width: double.infinity,
-        height: isCurrent ? activeCardHeight : inactiveCardHeight,
-        child: Directionality(
-          textDirection: TextDirection.rtl,
-          child: LudoMatchPlayerSection(
-            player: player,
-            isCurrent: isCurrent,
-            turnState: provider.turnState,
-            availableRolls: isCurrent
-                ? provider.availableRolls
-                : provider.availableRolls.clear(),
-            canRoll: isCurrent && provider.canRollDice,
-            onRoll: () {
-              unawaited(provider.rollDice());
-            },
-            height: isCurrent ? activeCardHeight : inactiveCardHeight,
-            onAvailableRollTap: provider.handleAvailableRollTap,
-            selectedRollSequence: provider.selectedRollSequence,
+        height: height,
+        child: RotatedBox(
+          quarterTurns: facesFarSide ? 2 : 0,
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: LudoMatchPlayerSection(
+              player: card.player,
+              isCurrent: card.isCurrent,
+              turnState: card.turnState,
+              availableRolls: card.availableRolls,
+              canRoll: card.canRoll,
+              onRoll: () {
+                unawaited(provider.rollDice());
+              },
+              height: height,
+              onAvailableRollTap: provider.handleAvailableRollTap,
+              selectedRollSequence: card.selectedRollSequence,
+              rollingDie: switch (card.dice) {
+                final dice? => (
+                  id: dice.id,
+                  value: dice.value,
+                  duration: dice.duration,
+                ),
+                null => null,
+              },
+            ),
           ),
         ),
       ),
     );
   }
 }
+
+/// What one card shows; equal data means the card does not rebuild.
+@immutable
+class _CardData {
+  final LudoPlayer player;
+  final bool isCurrent;
+  final TurnState? turnState;
+  final AvailableRolls availableRolls;
+  final bool canRoll;
+  final int? selectedRollSequence;
+  final DiceRollAnimation? dice;
+
+  const _CardData({
+    required this.player,
+    required this.isCurrent,
+    required this.turnState,
+    required this.availableRolls,
+    required this.canRoll,
+    required this.selectedRollSequence,
+    this.dice,
+  });
+
+  const _CardData.waiting(this.player)
+    : isCurrent = false,
+      turnState = null,
+      availableRolls = const AvailableRolls(),
+      canRoll = false,
+      selectedRollSequence = null,
+      dice = null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CardData &&
+      other.player == player &&
+      other.isCurrent == isCurrent &&
+      other.turnState == turnState &&
+      other.availableRolls == availableRolls &&
+      other.canRoll == canRoll &&
+      other.selectedRollSequence == selectedRollSequence &&
+      other.dice == dice;
+
+  @override
+  int get hashCode => Object.hash(
+    player,
+    isCurrent,
+    turnState,
+    availableRolls,
+    canRoll,
+    selectedRollSequence,
+    dice,
+  );
+}
+
+/// The board, rebuilt only when what it draws or accepts changes.
+class _BoardSlot extends StatelessWidget {
+  final ValueChanged<LudoToken> onTokenTap;
+  final Future<void> Function(MoveOption) onMove;
+
+  const _BoardSlot({required this.onTokenTap, required this.onMove});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.read<MatchGameProvider>();
+    final board = context.select<MatchGameProvider, _BoardData>(
+      (p) => (
+        players: p.players,
+        currentPlayerId: p.currentPlayerId,
+        moves: p.availableMoves,
+        selectedTokenId: p.selectedTokenId,
+        selectedRoll: p.selectedRollSequence,
+        pending: p.isSnapshotSaveBlocked ? null : p.pendingAutoMove,
+        destinations: p.selectedMoveDestinations,
+        selectableRolls: p.selectableRolls,
+        diceRolling: p.isDiceRolling,
+      ),
+    );
+
+    return LudoMatchBoard(
+      players: board.players,
+      currentPlayerId: board.currentPlayerId,
+      availableMoves: board.moves,
+      selectedTokenId: board.selectedTokenId,
+      selectedRollSequence: board.selectedRoll,
+      pendingAutoMove: board.pending,
+      onTokenTap: onTokenTap,
+      legalMoveDestinations: board.destinations,
+      rollValueForMove: provider.rollValueForMove,
+      onMoveTap: onMove,
+      // الرميات التي تناسب التوكن المحدد فقط.
+      selectableRolls: board.selectableRolls,
+      onAvailableRollTap: provider.handleAvailableRollTap,
+      sounds: provider.sounds,
+      inputLocked: board.diceRolling,
+      onAnimatingChanged: provider.setBoardAnimating,
+    );
+  }
+}
+
+/// What the board shows; records compare field by field (lists by
+/// identity, which the provider keeps stable per engine state).
+typedef _BoardData = ({
+  List<LudoPlayer> players,
+  String? currentPlayerId,
+  List<MoveOption> moves,
+  String? selectedTokenId,
+  int? selectedRoll,
+  MoveOption? pending,
+  Map<Position, List<MoveOption>> destinations,
+  AvailableRolls selectableRolls,
+  bool diceRolling,
+});
 
 class _ErrorBanner extends StatelessWidget {
   final String message;

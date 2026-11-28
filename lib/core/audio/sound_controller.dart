@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/settings/app_settings.dart';
@@ -10,6 +11,9 @@ import 'package:ludo_rank/core/settings/app_settings.dart';
 /// without depending on audio plugins (and lets tests use a fake).
 abstract interface class GameSoundPlayer {
   void play(GameSound sound);
+
+  /// A short vibration, under the same on/off switch as the sounds.
+  void haptic(GameHaptic kind);
 }
 
 /// App-wide sound effects with a persisted on/off switch.
@@ -58,13 +62,40 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
     unawaited(_play(sound));
   }
 
+  @override
+  void haptic(GameHaptic kind) {
+    if (!_enabled || _disposed) return;
+    unawaited(_vibrate(kind));
+  }
+
+  Future<void> _vibrate(GameHaptic kind) async {
+    try {
+      switch (kind) {
+        case GameHaptic.light:
+          await HapticFeedback.lightImpact();
+        case GameHaptic.medium:
+          await HapticFeedback.mediumImpact();
+      }
+    } catch (error) {
+      debugPrint('Haptic ${kind.name} failed: $error');
+    }
+  }
+
+  /// How many players [preload] loads for [sound]. Steps play in quick
+  /// succession and rotate through the whole pool during the first move,
+  /// so all of their players are loaded up front.
+  @visibleForTesting
+  static int preloadedPlayersFor(GameSound sound) {
+    return sound == GameSound.step ? _playersPerSound : 1;
+  }
+
   /// Loads every sound once (asset copy + native decode), so the first roll
   /// and the first token steps play on time instead of after a load.
   Future<void> preload() async {
     for (final sound in GameSound.values) {
       if (_disposed) return;
       try {
-        await _playerAt(sound, 0);
+        await _playerAt(sound, preloadedPlayersFor(sound) - 1);
       } catch (error) {
         debugPrint('Sound ${sound.name} preload failed: $error');
       }

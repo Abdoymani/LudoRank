@@ -1,4 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
+import 'package:ludo_rank/core/audio/game_sound.dart';
+import 'package:ludo_rank/core/audio/sound_controller.dart';
 
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 
@@ -6,7 +11,9 @@ import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
 import 'package:ludo_rank/features/ludo_game/presentation/widgets/match_ui/match_ui_colors.dart';
 
-class LudoGameResultOverlay extends StatelessWidget {
+/// The final result. It enters with a fade and a scale, then the ranks
+/// appear one after the other, each with a short reveal sound.
+class LudoGameResultOverlay extends StatefulWidget {
   final List<MatchPlayer> players;
   final Map<String, String> playerNames;
   final bool isSaved;
@@ -21,6 +28,18 @@ class LudoGameResultOverlay extends StatelessWidget {
   // لاعبو المحرك، لاستخراج اللون الحقيقي لكل لاعب.
   final List<LudoPlayer> gamePlayers;
 
+  /// Plays the reveal sound for each rank. Null: silent.
+  final GameSoundPlayer? sounds;
+
+  /// The card's fade + scale.
+  static const Duration entranceDuration = Duration(milliseconds: 380);
+
+  /// Time between two ranks appearing.
+  static const Duration rankStagger = Duration(milliseconds: 160);
+
+  /// How long one rank takes to appear.
+  static const Duration rankDuration = Duration(milliseconds: 260);
+
   const LudoGameResultOverlay({
     super.key,
     required this.players,
@@ -32,10 +51,97 @@ class LudoGameResultOverlay extends StatelessWidget {
     this.gameResult,
     this.matchPlayers = const <MatchPlayer>[],
     this.gamePlayers = const <LudoPlayer>[],
+    this.sounds,
   });
 
   @override
+  State<LudoGameResultOverlay> createState() => _LudoGameResultOverlayState();
+}
+
+class _LudoGameResultOverlayState extends State<LudoGameResultOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final int _rows;
+  int _soundsPlayed = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _rows = math.max(
+      widget.players.length,
+      widget.gameResult?.players.length ?? 0,
+    );
+    final total =
+        LudoGameResultOverlay.entranceDuration +
+        LudoGameResultOverlay.rankStagger * math.max(0, _rows - 1) +
+        LudoGameResultOverlay.rankDuration;
+    _controller = AnimationController(vsync: this, duration: total)
+      ..addListener(_playRankSounds)
+      ..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double get _totalMs => _controller.duration!.inMicroseconds / 1000;
+
+  /// Where rank [index] starts appearing, as a fraction of the animation.
+  double _rankStart(int index) {
+    final ms =
+        LudoGameResultOverlay.entranceDuration.inMilliseconds * .7 +
+        LudoGameResultOverlay.rankStagger.inMilliseconds * index;
+    return (ms / _totalMs).clamp(0.0, 1.0);
+  }
+
+  void _playRankSounds() {
+    while (_soundsPlayed < _rows &&
+        _controller.value >= _rankStart(_soundsPlayed)) {
+      _soundsPlayed++;
+      widget.sounds?.play(GameSound.reveal);
+    }
+  }
+
+  /// The animation of rank [index] (0 = first place).
+  Animation<double> _rankAnimation(int index) {
+    final start = _rankStart(index);
+    final end =
+        (start + LudoGameResultOverlay.rankDuration.inMilliseconds / _totalMs)
+            .clamp(start, 1.0);
+    return CurvedAnimation(
+      parent: _controller,
+      curve: Interval(start, end, curve: Curves.easeOutCubic),
+    );
+  }
+
+  Widget _reveal(int index, Widget child) {
+    final animation = _rankAnimation(index);
+    return FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, .35),
+          end: Offset.zero,
+        ).animate(animation),
+        child: child,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final players = widget.players;
+    final playerNames = widget.playerNames;
+    final isSaved = widget.isSaved;
+    final isLoading = widget.isLoading;
+    final onRetry = widget.onRetry;
+    final onClose = widget.onClose;
+    final gameResult = widget.gameResult;
+    final matchPlayers = widget.matchPlayers;
+    final gamePlayers = widget.gamePlayers;
+
     final sortedPlayers = [...players]
       ..sort((a, b) => (a.rank ?? 999).compareTo(b.rank ?? 999));
 
@@ -45,94 +151,113 @@ class LudoGameResultOverlay extends StatelessWidget {
         player.playerId: matchUiColorFor(player.color),
     };
 
-    return Material(
-      color: Colors.black.withValues(alpha: 0.58),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Card(
-            margin: const EdgeInsets.all(20),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isSaved ? Icons.emoji_events : Icons.warning_amber,
-                    size: 56,
-                    color: isSaved
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.error,
-                  ),
+    final entranceEnd =
+        (LudoGameResultOverlay.entranceDuration.inMilliseconds / _totalMs)
+            .clamp(0.0, 1.0);
+    final entrance = CurvedAnimation(
+      parent: _controller,
+      curve: Interval(0, entranceEnd, curve: Curves.easeOut),
+    );
+    final pop = CurvedAnimation(
+      parent: _controller,
+      curve: Interval(0, entranceEnd, curve: Curves.easeOutBack),
+    );
 
-                  const SizedBox(height: 10),
+    return FadeTransition(
+      opacity: entrance,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.58),
+        child: Center(
+          child: ScaleTransition(
+            scale: Tween<double>(begin: .86, end: 1).animate(pop),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Card(
+                margin: const EdgeInsets.all(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isSaved ? Icons.emoji_events : Icons.warning_amber,
+                        size: 56,
+                        color: isSaved
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.error,
+                      ),
 
-                  Text(
-                    isSaved ? 'انتهت المباراة' : 'انتهت اللعبة',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                      const SizedBox(height: 10),
 
-                  const SizedBox(height: 6),
+                      Text(
+                        isSaved ? 'انتهت المباراة' : 'انتهت اللعبة',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                        textAlign: TextAlign.center,
+                      ),
 
-                  Text(
-                    isSaved
-                        ? 'تم حفظ ترتيب اللاعبين والنقاط.'
-                        : 'اللعبة انتهت، لكن لم يتم حفظ النتيجة في قاعدة البيانات بعد.',
-                    textAlign: TextAlign.center,
-                  ),
+                      const SizedBox(height: 6),
 
-                  const SizedBox(height: 18),
+                      Text(
+                        isSaved
+                            ? 'تم حفظ ترتيب اللاعبين والنقاط.'
+                            : 'اللعبة انتهت، لكن لم يتم حفظ النتيجة في قاعدة البيانات بعد.',
+                        textAlign: TextAlign.center,
+                      ),
 
-                  if (sortedPlayers.isNotEmpty)
-                    _ResultsList(
-                      players: sortedPlayers,
-                      playerNames: playerNames,
-                      playerColors: playerColors,
-                    )
-                  else if (gameResult != null)
-                    _EngineResultsList(
-                      gameResult: gameResult!,
-                      matchPlayers: matchPlayers,
-                      playerNames: playerNames,
-                      playerColors: playerColors,
-                    ),
+                      const SizedBox(height: 18),
 
-                  const SizedBox(height: 18),
-
-                  if (!isSaved)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: isLoading ? null : onRetry,
-                        icon: isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.sync),
-                        label: Text(
-                          isLoading
-                              ? 'جاري إعادة الحفظ...'
-                              : 'إعادة حفظ النتيجة',
+                      if (sortedPlayers.isNotEmpty)
+                        _ResultsList(
+                          players: sortedPlayers,
+                          playerNames: playerNames,
+                          playerColors: playerColors,
+                          reveal: _reveal,
+                        )
+                      else if (gameResult != null)
+                        _EngineResultsList(
+                          gameResult: gameResult,
+                          matchPlayers: matchPlayers,
+                          playerNames: playerNames,
+                          playerColors: playerColors,
+                          reveal: _reveal,
                         ),
-                      ),
-                    ),
 
-                  if (isSaved && onClose != null)
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: onClose,
-                        child: const Text('العودة'),
-                      ),
-                    ),
-                ],
+                      const SizedBox(height: 18),
+
+                      if (!isSaved)
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: isLoading ? null : onRetry,
+                            icon: isLoading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.sync),
+                            label: Text(
+                              isLoading
+                                  ? 'جاري إعادة الحفظ...'
+                                  : 'إعادة حفظ النتيجة',
+                            ),
+                          ),
+                        ),
+
+                      if (isSaved && onClose != null)
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: onClose,
+                            child: const Text('العودة'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -142,6 +267,9 @@ class LudoGameResultOverlay extends StatelessWidget {
   }
 }
 
+/// Wraps rank [index]'s row in its reveal animation.
+typedef _RankReveal = Widget Function(int index, Widget child);
+
 // ==================================================================
 // RESULTS
 // ==================================================================
@@ -150,25 +278,31 @@ class _ResultsList extends StatelessWidget {
   final List<MatchPlayer> players;
   final Map<String, String> playerNames;
   final Map<String, Color> playerColors;
+  final _RankReveal reveal;
 
   const _ResultsList({
     required this.players,
     required this.playerNames,
     required this.playerColors,
+    required this.reveal,
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final player in players)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _ResultRow(
-              player: player,
-              displayName:
-                  playerNames[player.playerId] ?? 'اللاعب ${player.seat}',
-              color: playerColors[player.playerId],
+        for (var index = 0; index < players.length; index++)
+          reveal(
+            index,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _ResultRow(
+                player: players[index],
+                displayName:
+                    playerNames[players[index].playerId] ??
+                    'اللاعب ${players[index].seat}',
+                color: playerColors[players[index].playerId],
+              ),
             ),
           ),
       ],
@@ -253,12 +387,14 @@ class _EngineResultsList extends StatelessWidget {
   final List<MatchPlayer> matchPlayers;
   final Map<String, String> playerNames;
   final Map<String, Color> playerColors;
+  final _RankReveal reveal;
 
   const _EngineResultsList({
     required this.gameResult,
     required this.matchPlayers,
     required this.playerNames,
     required this.playerColors,
+    required this.reveal,
   });
 
   @override
@@ -268,15 +404,18 @@ class _EngineResultsList extends StatelessWidget {
 
     return Column(
       children: [
-        for (final result in results)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _EngineResultRow(
-              rank: result.rank,
-              displayName:
-                  playerNames[result.playerId] ??
-                  _fallbackName(result.playerId),
-              color: playerColors[result.playerId],
+        for (var index = 0; index < results.length; index++)
+          reveal(
+            index,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _EngineResultRow(
+                rank: results[index].rank,
+                displayName:
+                    playerNames[results[index].playerId] ??
+                    _fallbackName(results[index].playerId),
+                color: playerColors[results[index].playerId],
+              ),
             ),
           ),
       ],
