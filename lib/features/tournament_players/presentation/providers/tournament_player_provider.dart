@@ -66,6 +66,35 @@ class TournamentPlayerProvider extends ChangeNotifier {
     }
   }
 
+  /// Adds several players at once: all of them are saved or none.
+  Future<void> addPlayers(List<TournamentPlayer> players) async {
+    final existing = _players.map((player) => player.playerId).toSet();
+    final newPlayers = players
+        .where((player) => !existing.contains(player.playerId))
+        .toList(growable: false);
+
+    if (newPlayers.isEmpty) return;
+
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      await repository.addPlayers(newPlayers);
+
+      await loadPlayers(newPlayers.first.tournamentId);
+    } catch (e) {
+      _error = _isDuplicateError(e)
+          ? 'اللاعب موجود بالفعل في هذه البطولة'
+          : e is StateError
+          ? e.message
+          : e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> removePlayer(TournamentPlayer player) async {
     await repository.removePlayer(player.id);
 

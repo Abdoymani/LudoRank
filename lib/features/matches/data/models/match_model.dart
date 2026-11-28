@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:ludo_rank/core/database/database.dart';
 import 'package:ludo_rank/features/matches/domain/entities/match.dart';
@@ -22,10 +23,20 @@ class MatchModel extends Match {
       matchNumber: row.matchNumber,
       //playersCount: 0,  سيتم حسابها من MatchPlayers
       playersCount: row.playersCount,
-      status: MatchStatus.values.firstWhere((e) => e.name == row.status),
+      status: parseStatus(row.status),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
+  }
+
+  /// Unknown stored values become [MatchStatus.unknown] instead of
+  /// crashing the whole list.
+  static MatchStatus parseStatus(String value) {
+    for (final status in MatchStatus.values) {
+      if (status != MatchStatus.unknown && status.name == value) return status;
+    }
+    debugPrint('Unknown match status "$value"; shown as unknown.');
+    return MatchStatus.unknown;
   }
 
   factory MatchModel.fromEntity(Match match) {
@@ -41,6 +52,10 @@ class MatchModel extends Match {
   }
 
   MatchesCompanion toCompanion() {
+    if (status == MatchStatus.unknown) {
+      throw StateError('لا يمكن حفظ مباراة حالتها غير معروفة.');
+    }
+
     return MatchesCompanion(
       id: Value(id),
       tournamentId: Value(tournamentId),

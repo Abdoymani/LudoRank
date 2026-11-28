@@ -1,11 +1,14 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+import 'package:ludo_rank/core/transactions/transaction_runner.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/game_result.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
 import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_engine.dart';
+import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_state_normalizer.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
 import 'package:ludo_rank/features/match_players/domain/repositories/match_player_repository.dart';
 
@@ -45,11 +48,16 @@ class MatchGameService {
   final MatchPointsCalculator pointsCalculator;
   final MatchGameStateRepository gameStateRepository;
 
+  /// Saves the players' points, the finished status and the snapshot
+  /// removal as one unit when a match completes.
+  final TransactionRunner transactionRunner;
+
   const MatchGameService({
     required this.matchRepository,
     required this.matchPlayerRepository,
     this.pointsCalculator = const MatchPointsCalculator(),
     required this.gameStateRepository,
+    this.transactionRunner = const NoTransactionRunner(),
   });
 
   /// Starts a match and returns its runtime session.
@@ -120,6 +128,11 @@ class MatchGameService {
   /// The saved state is validated before creating the runtime session.
   /// The engine is initialized directly from the saved state.
   ///
+  /// When the snapshot is a finished game (the app closed after the last
+  /// move but before the result was saved), the returned session is already
+  /// finished: the caller completes it with [completeMatch] instead of
+  /// replaying the last move.
+  ///
   /// IMPORTANT:
   /// Do not call engine.startGame() here.
   /// Doing so would reset the restored game state.
@@ -140,18 +153,30 @@ class MatchGameService {
     final matchPlayers = await matchPlayerRepository.getMatchPlayers(matchId);
 
     // 4. Load the saved engine state.
-    final savedState = await gameStateRepository.loadGameState(matchId);
+    final loadedState = await gameStateRepository.loadGameState(matchId);
 
-    if (savedState == null) {
+    if (loadedState == null) {
       throw StateError('لا توجد Snapshot محفوظة للمباراة $matchId.');
     }
 
+    // Derived fields (safe/normal, homeEntryPending, token ids) are
+    // recomputed so an older snapshot never locks the match.
+    final savedState = LudoGameStateNormalizer.normalize(loadedState);
+
     // 5. Validate consistency between Match, MatchPlayers and Snapshot.
-    const MatchGameStateValidator().validate(
-      match: match,
-      matchPlayers: matchPlayers,
-      state: savedState,
-    );
+    if (savedState.isFinished) {
+      const MatchGameStateValidator().validateFinished(
+        match: match,
+        matchPlayers: matchPlayers,
+        state: savedState,
+      );
+    } else {
+      const MatchGameStateValidator().validate(
+        match: match,
+        matchPlayers: matchPlayers,
+        state: savedState,
+      );
+    }
 
     // 6. Restore the engine directly from the saved state.
     // Do NOT call startGame().
@@ -196,6 +221,28 @@ class MatchGameService {
     );
   }
 
+  /// Saves the final (finished) board of a match that is still Playing.
+  ///
+  /// Written right before the result transaction, so if the app closes in
+  /// between, [resumeMatch] restores the finished board and the result is
+  /// saved then, instead of the players replaying the last move.
+  Future<void> saveFinalSnapshot({required MatchGameSession session}) async {
+    if (!session.isFinished) {
+      throw StateError('لا يمكن حفظ Snapshot نهائية قبل انتهاء اللعبة.');
+    }
+
+    const MatchGameStateValidator().validateFinished(
+      match: session.match,
+      matchPlayers: session.matchPlayers,
+      state: session.state,
+    );
+
+    await gameStateRepository.saveGameState(
+      matchId: session.match.id,
+      state: session.state,
+    );
+  }
+
   /// Completes a running match using the result produced by
   /// the current LudoGameEngine.
   ///
@@ -206,6 +253,14 @@ class MatchGameService {
     }
 
     final result = session.result;
+
+    try {
+      await saveFinalSnapshot(session: session);
+    } catch (e) {
+      // Only a safety net for a crash before the result is saved; the
+      // result transaction below is what matters, so keep going.
+      debugPrint('Final snapshot was not saved for ${session.match.id}: $e');
+    }
 
     return completeMatchFromResult(session: session, result: result);
   }
@@ -230,14 +285,6 @@ class MatchGameService {
       throw StateError('GameResult ليس مكتملًا.');
     }
 
-    /// final match = session.match;
-
-    ///if (match.status == MatchStatus.finished) {
-    /// throw StateError(
-    /// 'المباراة تم إنهاؤها بالفعل.',
-    /// );
-    /// }
-    ///
     final match = await matchRepository.getById(session.match.id);
 
     if (match == null) {
@@ -281,14 +328,19 @@ class MatchGameService {
       );
     }
 
-    await matchPlayerRepository.updateMatchPlayers(updatedPlayers);
-
     final finishedMatch = match.copyWith(
       status: MatchStatus.finished,
       updatedAt: DateTime.now(),
     );
 
-    await matchRepository.update(finishedMatch);
+    // Points, ranks, the finished status and the snapshot removal are saved
+    // together: a crash leaves either the playing match (with its final
+    // snapshot) or the finished match, never points on a playing match.
+    await transactionRunner.run(() async {
+      await matchPlayerRepository.updateMatchPlayers(updatedPlayers);
+      await matchRepository.update(finishedMatch);
+      await gameStateRepository.clearGameState(match.id);
+    });
 
     return List.unmodifiable(updatedPlayers);
   }

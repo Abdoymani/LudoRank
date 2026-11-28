@@ -25,6 +25,14 @@ class TournamentPlayerRepositoryImpl implements TournamentPlayerRepository {
   }
 
   @override
+  Future<void> addPlayers(List<TournamentPlayer> players) {
+    return dao.insertTournamentPlayers([
+      for (final player in players)
+        TournamentPlayerModel.fromEntity(player).toCompanion(),
+    ]);
+  }
+
+  @override
   Future<void> removePlayer(String id) {
     return dao.removePlayer(id);
   }

@@ -202,6 +202,105 @@ void main() {
     expect(gameStateRepository.saveCallCount, 1);
   });
 
+  group('second move of the turn', () {
+    // 6 then 2: the 6 brings token 0 out, then only token 0 can play the 2.
+    Future<MatchGameProvider> afterExit({
+      Duration autoMoveDelay = Duration.zero,
+    }) async {
+      final provider = await started([6, 2], autoMoveDelay: autoMoveDelay);
+      await provider.rollDice();
+      await provider.rollDice();
+      expect(provider.pendingAutoMove, isNull, reason: 'several exits');
+      return provider;
+    }
+
+    ExitToken exitOf(MatchGameProvider provider) => provider.availableMoves
+        .whereType<ExitToken>()
+        .firstWhere((move) => move.tokenId == 'player-1-token-0');
+
+    test('the only legal move left is played automatically', () async {
+      final provider = await afterExit();
+
+      await provider.executeMove(exitOf(provider));
+
+      final pending = provider.pendingAutoMove;
+      expect(pending, isA<MoveToken>());
+      final move = pending! as MoveToken;
+      expect(move.tokenId, 'player-1-token-0');
+      expect(move.steps, 2);
+
+      await provider.executeMove(move);
+      expect(provider.currentPlayerId, 'player-2');
+      expect(provider.pendingAutoMove, isNull);
+    });
+
+    test('it waits for autoMoveDelay and does not hold executeMove', () async {
+      final provider = await afterExit(
+        autoMoveDelay: const Duration(milliseconds: 60),
+      );
+
+      await provider.executeMove(exitOf(provider));
+      expect(provider.pendingAutoMove, isNull);
+
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(provider.pendingAutoMove, isA<MoveToken>());
+      provider.dispose();
+    });
+
+    test('it is dropped when the player moves by hand first', () async {
+      final provider = await afterExit(
+        autoMoveDelay: const Duration(milliseconds: 60),
+      );
+
+      await provider.executeMove(exitOf(provider));
+      await provider.executeMove(provider.availableMoves.single);
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      expect(provider.pendingAutoMove, isNull);
+      expect(provider.currentPlayerId, 'player-2');
+    });
+
+    test('it is dropped when the page closed meanwhile', () async {
+      final provider = await afterExit(
+        autoMoveDelay: const Duration(milliseconds: 40),
+      );
+
+      await provider.executeMove(exitOf(provider));
+      provider.dispose();
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
+      expect(provider.pendingAutoMove, isNull);
+    });
+
+    test('it waits while the save fails', () async {
+      final provider = await afterExit(
+        autoMoveDelay: const Duration(milliseconds: 20),
+      );
+      gameStateRepository.throwExceptionOnSave = true;
+
+      await provider.executeMove(exitOf(provider));
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(provider.hasSnapshotSaveError, isTrue);
+      expect(provider.pendingAutoMove, isNull);
+    });
+
+    test('no automatic move when several moves remain', () async {
+      final provider = await started([6, 6, 2]);
+      await provider.rollDice();
+      await provider.rollDice();
+      await provider.rollDice();
+
+      final exit = provider.availableMoves.whereType<ExitToken>().firstWhere(
+        (move) => move.tokenId == 'player-1-token-0' && move.rollSequence == 1,
+      );
+      await provider.executeMove(exit);
+
+      expect(provider.availableMoves.length, greaterThan(1));
+      expect(provider.pendingAutoMove, isNull);
+    });
+  });
+
   test('resume restores the automatic move after a roll', () async {
     final first = await started([...setupDice, 3]);
     await oneTokenOnBoard(first);

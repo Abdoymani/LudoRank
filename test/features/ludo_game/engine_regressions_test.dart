@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
@@ -86,7 +88,54 @@ LudoGameEngine _parkedOn51Engine() {
   )..startGame();
 }
 
+LudoGameState _freshGame() {
+  return LudoGameState.initial(
+    players: [
+      _player('a', 1, LudoPlayerColor.green, [
+        for (var i = 0; i < 4; i++) _token('a', i),
+      ]),
+      _player('b', 2, LudoPlayerColor.blue, [
+        for (var i = 0; i < 4; i++) _token('b', i),
+      ]),
+    ],
+  );
+}
+
+/// Rolls [count] times, playing the first legal move after each roll.
+List<int> _rolls(LudoGameEngine engine, int count) {
+  final values = <int>[];
+  for (var i = 0; i < count && !engine.isFinished; i++) {
+    engine.rollDice();
+    values.add(engine.lastRolledValue!);
+    while (engine.state.turnState.phase == TurnPhase.playing) {
+      engine.executeMove(engine.getValidMoves().first);
+    }
+  }
+  return values;
+}
+
 void main() {
+  group('Dice source', () {
+    test('the default (secure) dice only roll 1 to 6 and roll every face', () {
+      final seen = <int>{};
+      for (var game = 0; game < 40; game++) {
+        final engine = LudoGameEngine(initialState: _freshGame())..startGame();
+        seen.addAll(_rolls(engine, 5));
+      }
+      expect(seen.every((v) => v >= 1 && v <= 6), isTrue);
+      expect(seen, {1, 2, 3, 4, 5, 6});
+    });
+
+    test('an injected Random gives repeatable dice for tests', () {
+      List<int> play() => _rolls(
+        LudoGameEngine(initialState: _freshGame(), random: Random(42))
+          ..startGame(),
+        20,
+      );
+      expect(play(), play());
+    });
+  });
+
   group('Home lane entry after first capture', () {
     test('token parked on Main Loop 51 continues the loop instead of jumping '
         'into the home lane', () {

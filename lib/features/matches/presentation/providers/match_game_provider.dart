@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:ludo_rank/core/audio/game_sound.dart';
 import 'package:ludo_rank/core/audio/sound_controller.dart';
+import 'package:ludo_rank/core/database/database_checkpointer.dart';
 import 'package:ludo_rank/features/matches/presentation/providers/game_sound_events.dart';
 
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
@@ -60,11 +61,17 @@ class MatchGameProvider extends ChangeNotifier {
   LudoGameState? _movesCacheState;
   List<MoveOption> _movesCache = const <MoveOption>[];
 
+  /// Waits for this match's in-flight save before a WAL checkpoint.
+  final DatabaseCheckpointer? checkpointer;
+
   MatchGameProvider({
     required this.service,
     this.sounds,
     this.autoMoveDelay = Duration.zero,
-  });
+    this.checkpointer,
+  }) {
+    checkpointer?.addPendingSaveWaiter(waitForPendingSave);
+  }
 
   bool get isDisposed => _disposed;
 
@@ -104,6 +111,7 @@ class MatchGameProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    checkpointer?.removePendingSaveWaiter(waitForPendingSave);
     _rollNoticeTimer?.cancel();
     for (final timer in _soundTimers) {
       timer.cancel();
@@ -456,6 +464,16 @@ class MatchGameProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+
+    // The app closed after the winning move but before the result was
+    // saved: the finished board was restored, so save the result now and
+    // show the result screen instead of asking for the last move again.
+    final restored = _session;
+    if (restored != null &&
+        restored.isFinished &&
+        _matchStatus != MatchStatus.finished) {
+      await _completeFinishedMatch();
+    }
   }
 
   // ============================================================
@@ -526,15 +544,11 @@ class MatchGameProvider extends ChangeNotifier {
         notifyListeners();
 
         if (autoMove != null && autoMoveDelay > Duration.zero) {
-          await Future<void>.delayed(autoMoveDelay);
-          // Skip if the page closed or the player already moved by hand.
-          if (!_disposed &&
-              identical(_session, currentSession) &&
-              identical(currentSession.engine.state, stateAfterRoll) &&
-              _pendingAutoMove == null) {
-            _pendingAutoMove = autoMove;
-            notifyListeners();
-          }
+          await _offerAutoMoveAfterDelay(
+            currentSession,
+            stateAfterRoll,
+            autoMove,
+          );
         }
       } catch (e) {
         _isSavingSnapshot = false;
@@ -789,6 +803,18 @@ class MatchGameProvider extends ChangeNotifier {
         return;
       }
 
+      // The turn goes on (e.g. 6 then 3, the 6 was played) and the rest
+      // has a single legal move: play it automatically, like after a roll.
+      final legalMoves = availableMoves;
+      final stateAfterMove = currentSession.engine.state;
+      final autoMove = turnState?.isPlaying == true && legalMoves.length == 1
+          ? legalMoves.single
+          : null;
+
+      if (autoMove != null && autoMoveDelay == Duration.zero) {
+        _pendingAutoMove = autoMove;
+      }
+
       // 4. قفل اللعب أثناء حفظ Snapshot.
       _isSavingSnapshot = true;
       _snapshotSaveFailed = false;
@@ -796,12 +822,14 @@ class MatchGameProvider extends ChangeNotifier {
       notifyListeners();
 
       // 5. حفظ الحالة الجديدة بعد الحركة.
+      var saved = false;
       try {
         await _trackSave(service.saveSnapshot(session: currentSession));
 
         _isSavingSnapshot = false;
         _snapshotSaveFailed = false;
         _error = null;
+        saved = true;
       } catch (e) {
         _isSavingSnapshot = false;
         _snapshotSaveFailed = true;
@@ -809,6 +837,14 @@ class MatchGameProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+
+      // Not awaited: the board waits for executeMove to finish its
+      // animation bookkeeping before it can start the next move.
+      if (saved && autoMove != null && autoMoveDelay > Duration.zero) {
+        unawaited(
+          _offerAutoMoveAfterDelay(currentSession, stateAfterMove, autoMove),
+        );
+      }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -1005,6 +1041,25 @@ class MatchGameProvider extends ChangeNotifier {
         });
         _soundTimers.add(timer);
       }
+    }
+  }
+
+  /// Offers [move] as the automatic move after [autoMoveDelay], so the
+  /// players see the dice/board first. Skipped if the page closed, the
+  /// state changed, or the player already moved by hand.
+  Future<void> _offerAutoMoveAfterDelay(
+    MatchGameSession session,
+    LudoGameState expectedState,
+    MoveOption move,
+  ) async {
+    await Future<void>.delayed(autoMoveDelay);
+    if (!_disposed &&
+        identical(_session, session) &&
+        identical(session.engine.state, expectedState) &&
+        _pendingAutoMove == null &&
+        !isSnapshotSaveBlocked) {
+      _pendingAutoMove = move;
+      notifyListeners();
     }
   }
 

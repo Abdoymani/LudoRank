@@ -133,4 +133,31 @@ void main() {
       expect(match.gameStateJson, snapshot);
     });
   });
+
+  group('deleteMatch', () {
+    test('refuses to delete a finished match', () async {
+      await dao.updateMatch(
+        const MatchesCompanion(id: Value('match-1'), status: Value('finished')),
+      );
+
+      await expectLater(dao.deleteMatch('match-1'), throwsStateError);
+      expect(await dao.getMatchById('match-1'), isNotNull);
+    });
+
+    test('deletes an unfinished match; the next number is max + 1 '
+        '(audit probe P10)', () async {
+      await dao.insertMatch(
+        MatchesCompanion.insert(
+          id: 'match-2',
+          tournamentId: 'tournament-1',
+          matchNumber: 0,
+          status: 'pending',
+        ),
+      );
+      expect((await dao.getMatchById('match-2'))!.matchNumber, 2);
+
+      expect(await dao.deleteMatch('match-2'), 1);
+      expect(await dao.nextMatchNumber('tournament-1'), 2);
+    });
+  });
 }

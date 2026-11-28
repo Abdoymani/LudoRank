@@ -1,4 +1,6 @@
 import 'package:ludo_rank/features/ludo_game/domain/constants/ludo_paths.dart';
+import 'package:ludo_rank/features/ludo_game/domain/constants/safe_cells.dart';
+import 'package:ludo_rank/features/ludo_game/domain/entities/position.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_player.dart';
 import 'package:ludo_rank/features/ludo_game/domain/entities/ludo_token.dart';
 import 'package:ludo_rank/features/ludo_game/domain/models/ludo_game_state.dart';
@@ -18,6 +20,9 @@ import 'package:ludo_rank/features/ludo_game/domain/services/ludo_game_engine.da
 /// - TurnState and its dice rolls
 ///
 /// It does not modify or repair the supplied state.
+///
+/// [validate] is for an active match; [validateFinished] is only for the
+/// final snapshot of a match whose last move ended the game.
 class MatchGameStateValidator {
   const MatchGameStateValidator();
 
@@ -29,7 +34,31 @@ class MatchGameStateValidator {
     required LudoGameState state,
   }) {
     _validateMatchPlayers(match: match, matchPlayers: matchPlayers);
-    _validateGameState(match: match, matchPlayers: matchPlayers, state: state);
+    _validateGameState(
+      match: match,
+      matchPlayers: matchPlayers,
+      state: state,
+      finished: false,
+    );
+  }
+
+  /// Validates the final board of a game that has just finished.
+  ///
+  /// Used only for the final snapshot written right before the result is
+  /// saved, so a crash in between can be completed on the next resume.
+  /// [validate] keeps rejecting finished states for the normal save path.
+  void validateFinished({
+    required Match match,
+    required List<MatchPlayer> matchPlayers,
+    required LudoGameState state,
+  }) {
+    _validateMatchPlayers(match: match, matchPlayers: matchPlayers);
+    _validateGameState(
+      match: match,
+      matchPlayers: matchPlayers,
+      state: state,
+      finished: true,
+    );
   }
 
   void _validateMatchPlayers({
@@ -74,13 +103,18 @@ class MatchGameStateValidator {
     required Match match,
     required List<MatchPlayer> matchPlayers,
     required LudoGameState state,
+    required bool finished,
   }) {
     if (!state.isStarted) {
       _fail('Snapshot تشير إلى أن اللعبة لم تبدأ.');
     }
 
-    if (state.isFinished) {
+    if (!finished && state.isFinished) {
       _fail('لا يمكن استعادة مباراة منتهية كأنها مباراة نشطة.');
+    }
+
+    if (finished && !state.isFinished) {
+      _fail('Snapshot النهائية لا تشير إلى أن اللعبة انتهت.');
     }
 
     if (state.players.length != match.playersCount) {
@@ -140,9 +174,30 @@ class MatchGameStateValidator {
     }
 
     _validatePlayersAndTokens(state);
-    _validateFinishedPlayers(state);
+    _validateFinishedPlayers(state, finished: finished);
+
+    if (finished) {
+      _validateCompletedTurn(state);
+      return;
+    }
+
     _validateCurrentPlayer(state);
     _validateTurnState(state);
+  }
+
+  /// A finished game stops on the move that ended it: no rolls are left.
+  void _validateCompletedTurn(LudoGameState state) {
+    final turn = state.turnState;
+
+    if (turn.phase != TurnPhase.completed) {
+      _fail('مرحلة الدور في Snapshot النهائية يجب أن تكون completed.');
+    }
+
+    if (turn.availableRolls.isNotEmpty) {
+      _fail('Snapshot النهائية تحتوي على رميات متاحة.');
+    }
+
+    _validateRollHistory(turn);
   }
 
   /// كل لاعب: لون مختلف، و4 قطع بأرقام 0..3، وكل قطعة على البورد
@@ -172,6 +227,40 @@ class MatchGameStateValidator {
         _validateTokenPosition(player: player, token: token, path: path);
       }
     }
+
+    _validatePlainCellOccupancy(state);
+  }
+
+  /// On a plain main-loop cell (not safe, not a home lane) the rules allow
+  /// one colour only (landing on a single enemy captures it, two enemies
+  /// block) and at most two tokens (an own pair blocks a third).
+  void _validatePlainCellOccupancy(LudoGameState state) {
+    final owners = <Position, Set<String>>{};
+    final counts = <Position, int>{};
+
+    for (final player in state.players) {
+      final path = LudoPaths.forColor(player.color);
+
+      for (final token in player.tokens) {
+        if (token.isInitial || token.isFinished) continue;
+        if (SafeCells.contains(token.position)) continue;
+        if (path.homePath.contains(token.position)) continue;
+
+        owners
+            .putIfAbsent(token.position, () => <String>{})
+            .add(player.playerId);
+        counts[token.position] = (counts[token.position] ?? 0) + 1;
+      }
+    }
+
+    owners.forEach((position, playerIds) {
+      if (playerIds.length > 1) {
+        _fail('أكثر من لون على خانة عادية واحدة ($position).');
+      }
+      if (counts[position]! > 2) {
+        _fail('أكثر من قطعتين من نفس اللون على خانة عادية ($position).');
+      }
+    });
   }
 
   void _validateTokenPosition({
@@ -216,7 +305,7 @@ class MatchGameStateValidator {
     }
   }
 
-  void _validateFinishedPlayers(LudoGameState state) {
+  void _validateFinishedPlayers(LudoGameState state, {required bool finished}) {
     final playerIds = state.players.map((player) => player.playerId).toSet();
     final finishedIds = <String>{};
 
@@ -251,8 +340,13 @@ class MatchGameStateValidator {
     }
 
     // Fast Mode ends when playersCount - 1 players have finished.
-    // Therefore an active match must have fewer finishers than that.
-    if (finishedIds.length >= state.players.length - 1) {
+    // Therefore an active match must have fewer finishers than that,
+    // and a finished one exactly that many.
+    if (finished) {
+      if (finishedIds.length != state.players.length - 1) {
+        _fail('عدد اللاعبين المنتهين لا يطابق نهاية المباراة.');
+      }
+    } else if (finishedIds.length >= state.players.length - 1) {
       _fail('عدد اللاعبين المنتهين يعني أن المباراة كان يجب أن تنتهي.');
     }
   }
@@ -304,6 +398,14 @@ class MatchGameStateValidator {
 
     if (turn.phase == TurnPhase.playing && turn.availableRolls.isEmpty) {
       _fail('مرحلة playing تتطلب وجود رمية متاحة واحدة على الأقل.');
+    }
+
+    // A six always earns another roll, so the engine only enters playing
+    // on a non-six. Playing right after a six would skip that roll.
+    if (turn.phase == TurnPhase.playing &&
+        turn.rolls.isNotEmpty &&
+        turn.rolls.last.isSix) {
+      _fail('مرحلة playing بعد رمية 6 بدون رمية إضافية.');
     }
 
     // rolling may legitimately contain available rolls after a capture bonus.

@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ludo_rank/app/app_routes.dart';
+import 'package:ludo_rank/core/dependency_injection/injection_container.dart';
+import 'package:ludo_rank/features/backup/data/data_export_service.dart';
+import 'package:ludo_rank/features/backup/presentation/widgets/export_data_button.dart';
 import 'package:ludo_rank/features/home/presentation/providers/home_provider.dart';
 import 'package:ludo_rank/features/home/presentation/widgets/dashboard_card.dart';
 import 'package:ludo_rank/features/players/presentation/widgets/app_loading.dart';
@@ -32,6 +35,7 @@ class _HomePageState extends State<HomePage> {
       builder: (context, provider, child) {
         return AppScaffold(
           title: 'LudoRank',
+          actions: [ExportDataButton(service: () => sl<DataExportService>())],
           body: provider.isLoading
               ? const AppLoading()
               : SingleChildScrollView(

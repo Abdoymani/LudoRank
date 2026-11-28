@@ -73,7 +73,8 @@ class _TournamentsPageState extends State<TournamentsPage> {
       );
     }
 
-    final tournaments = provider.tournaments.reversed.toList();
+    // The DAO already lists the newest tournament first.
+    final tournaments = provider.tournaments;
 
     return ListView.separated(
       padding: const EdgeInsets.all(16),

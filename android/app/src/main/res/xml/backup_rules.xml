@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup up to Android 11. The database lives in app_flutter/.
+     Its WAL/SHM side files are left out: the app folds the WAL into
+     ludorank.db when it goes to the background, so the main file alone
+     is a complete copy, and a stale WAL restored next to it could not be
+     matched to it. -->
+<full-backup-content>
+    <exclude domain="root" path="app_flutter/ludorank.db-wal" />
+    <exclude domain="root" path="app_flutter/ludorank.db-shm" />
+</full-backup-content>

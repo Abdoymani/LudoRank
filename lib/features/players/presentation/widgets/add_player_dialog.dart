@@ -20,6 +20,10 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
   final _nicknameController = TextEditingController();
   final _notesController = TextEditingController();
 
+  /// Shown under the name field when the name is already taken.
+  String? _nameError;
+  bool _saving = false;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -29,6 +33,8 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
   }
 
   Future<void> _save() async {
+    // A taken name stays flagged until the user edits it (onChanged).
+    if (_saving || _nameError != null) return;
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -50,24 +56,26 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
       updatedAt: DateTime.now(),
     );
 
+    setState(() => _saving = true);
     try {
       await provider.addPlayer(player);
 
       if (!mounted) return;
 
       Navigator.pop(context);
-    } on DuplicatePlayerNameException {
+    } on DuplicatePlayerNameException catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اسم اللاعب مسجل بالفعل، اختر اسمًا آخر')),
-      );
+      // Inline, next to the field, so the dialog stays open for a fix.
+      setState(() => _nameError = e.message);
     } catch (_) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تعذر إضافة اللاعب، حاول مرة أخرى')),
       );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -84,7 +92,15 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'اسم اللاعب'),
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'اسم اللاعب',
+                  errorMaxLines: 4,
+                ),
+                forceErrorText: _nameError,
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'الاسم مطلوب';
@@ -121,7 +137,10 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
           child: const Text('إلغاء'),
         ),
 
-        ElevatedButton(onPressed: _save, child: const Text('حفظ')),
+        ElevatedButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('حفظ'),
+        ),
       ],
     );
   }

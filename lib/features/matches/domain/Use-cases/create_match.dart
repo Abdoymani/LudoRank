@@ -1,6 +1,7 @@
 import 'package:ludo_rank/core/transactions/transaction_runner.dart';
 import 'package:ludo_rank/features/match_players/domain/repositories/match_player_repository.dart';
 import 'package:ludo_rank/features/match_players/domain/entities/match_player.dart';
+import 'package:ludo_rank/features/tournament_players/domain/repositories/tournament_player_repository.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 import '../entities/match.dart';
 
@@ -15,6 +16,10 @@ class CreateMatch {
   /// match moves the tournament to Running.
   final TournamentLifecycleService? tournamentLifecycle;
 
+  /// Optional for the same reason. When given, every player must already
+  /// be a member of the match's tournament (standings only count members).
+  final TournamentPlayerRepository? tournamentPlayerRepository;
+
   /// Saves the match, its players and the tournament status together.
   /// If any step fails (or the app is killed mid-way) nothing is saved,
   /// so there is never a match without players.
@@ -24,6 +29,7 @@ class CreateMatch {
     required this.matchRepository,
     required this.matchPlayerRepository,
     this.tournamentLifecycle,
+    this.tournamentPlayerRepository,
     this.transactionRunner = const NoTransactionRunner(),
   });
 
@@ -36,12 +42,33 @@ class CreateMatch {
 
     await transactionRunner.run(() async {
       await tournamentLifecycle?.ensureCanCreateMatch(match.tournamentId);
+      await _ensurePlayersAreMembers(match, players);
 
       await matchRepository.create(match);
       await matchPlayerRepository.addPlayers(players);
 
       await tournamentLifecycle?.markRunning(match.tournamentId);
     });
+  }
+
+  Future<void> _ensurePlayersAreMembers(
+    Match match,
+    List<MatchPlayer> players,
+  ) async {
+    final repository = tournamentPlayerRepository;
+    if (repository == null) return;
+
+    final members = (await repository.getTournamentPlayers(
+      match.tournamentId,
+    )).map((member) => member.playerId).toSet();
+
+    for (final player in players) {
+      if (!members.contains(player.playerId)) {
+        throw ArgumentError(
+          'اللاعب ${player.playerId} ليس مشتركًا في هذه البطولة.',
+        );
+      }
+    }
   }
 
   void _validateMatch(Match match) {

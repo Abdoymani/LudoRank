@@ -3,6 +3,11 @@ import 'package:ludo_rank/features/match_players/domain/entities/match_player.da
 abstract class MatchPlayerRepository {
   Future<List<MatchPlayer>> getMatchPlayers(String matchId);
 
+  /// Player rows of all finished matches in a tournament (one query).
+  Future<List<MatchPlayer>> getFinishedTournamentMatchPlayers(
+    String tournamentId,
+  );
+
   Future<MatchPlayer?> getMatchPlayer(String id);
 
   Future<void> addPlayer(MatchPlayer player);

@@ -1,6 +1,17 @@
 import 'package:equatable/equatable.dart';
 
-enum TournamentStatus { draft, ready, running, finished, cancelled }
+enum TournamentStatus {
+  draft,
+  ready,
+  running,
+  finished,
+  cancelled,
+
+  /// Read-only placeholder for a stored status this app version does not
+  /// know. It is never written: every write path rejects it, so the
+  /// original value stays in the database.
+  unknown,
+}
 
 class Tournament extends Equatable {
   final String id;

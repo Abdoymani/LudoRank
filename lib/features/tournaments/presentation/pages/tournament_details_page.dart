@@ -63,6 +63,9 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
     await standingsProvider.load(
       tournamentId: widget.tournamentId,
       participants: List.of(tournamentPlayerProvider.players),
+      playerNames: {
+        for (final player in playerProvider.players) player.id: player.name,
+      },
     );
   }
 
@@ -81,18 +84,27 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
 
     if (result == null || result.isEmpty) return;
 
-    for (final playerId in result) {
-      await tournamentPlayerProvider.addPlayer(
+    final joinedAt = DateTime.now();
+    await tournamentPlayerProvider.addPlayers([
+      for (final playerId in result)
         TournamentPlayer(
           id: uuid.v4(),
           tournamentId: widget.tournamentId,
           playerId: playerId,
-          joinedAt: DateTime.now(),
+          joinedAt: joinedAt,
         ),
-      );
-    }
+    ]);
 
     if (!mounted) return;
+
+    final addError = tournamentPlayerProvider.error;
+    if (addError != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('تعذر إضافة اللاعبين: $addError')),
+        );
+    }
 
     await _loadStandings();
 
@@ -189,6 +201,8 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
         return 'مكتملة';
       case TournamentStatus.cancelled:
         return 'ملغاة';
+      case TournamentStatus.unknown:
+        return 'غير معروفة';
     }
   }
 
@@ -204,6 +218,8 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
         return Colors.amber.shade700;
       case TournamentStatus.cancelled:
         return colors.error;
+      case TournamentStatus.unknown:
+        return colors.outline;
     }
   }
 

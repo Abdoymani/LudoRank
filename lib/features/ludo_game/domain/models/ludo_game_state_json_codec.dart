@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../constants/safe_cells.dart';
 import '../entities/ludo_player.dart';
 import '../entities/ludo_token.dart';
 import '../entities/position.dart';
@@ -127,19 +128,37 @@ class LudoGameStateJsonCodec {
   }
 
   static LudoToken _tokenFromJson(Map<String, dynamic> json) {
+    final position = _positionFromJson(
+      _asMap(json['position'], 'token.position'),
+    );
+
     return LudoToken(
       id: _asString(json['id'], 'token.id'),
       playerId: _asString(json['playerId'], 'token.playerId'),
       tokenIndex: _asInt(json['tokenIndex'], 'token.tokenIndex'),
-      position: _positionFromJson(_asMap(json['position'], 'token.position')),
+      position: position,
       positionInPath: _asInt(json['positionInPath'], 'token.positionInPath'),
-      state: _enumByName(LudoTokenState.values, json['state'], 'token.state'),
+      state: _tokenStateFromJson(json['state'], position),
       homeEntryPending: _asBool(
         json['homeEntryPending'],
         'token.homeEntryPending',
       ),
     );
   }
+
+  /// `safeInPair` was written by early versions but never used by the
+  /// engine; it becomes `safe` on a safe cell and `normal` elsewhere.
+  static LudoTokenState _tokenStateFromJson(dynamic value, Position position) {
+    if (value == _legacySafeInPair) {
+      return SafeCells.contains(position)
+          ? LudoTokenState.safe
+          : LudoTokenState.normal;
+    }
+
+    return _enumByName(LudoTokenState.values, value, 'token.state');
+  }
+
+  static const String _legacySafeInPair = 'safeInPair';
 
   // ============================================================
   // POSITION

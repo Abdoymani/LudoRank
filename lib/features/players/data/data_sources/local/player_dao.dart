@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:ludo_rank/core/database/database.dart';
 import 'package:ludo_rank/core/database/tables/players_table.dart';
+import 'package:ludo_rank/features/players/domain/services/player_name_normalizer.dart';
 
 part 'player_dao.g.dart';
 
@@ -23,12 +24,23 @@ class PlayerDao extends DatabaseAccessor<AppDatabase> with _$PlayerDaoMixin {
     return into(players).insert(player);
   }
 
-  Future<bool> playerNameExists(String name) async {
-    final player = await (select(
-      players,
-    )..where((tbl) => tbl.name.equals(name.trim()))).getSingleOrNull();
+  /// Whether another player already has this name once both are
+  /// normalised (case, hamza, tashkeel, spacing). [exceptId] skips the
+  /// player being renamed.
+  Future<bool> playerNameExists(String name, {String? exceptId}) async {
+    final normalized = normalizePlayerName(name);
+    final query = select(players)
+      ..where((tbl) {
+        final sameName =
+            tbl.normalizedName.equals(normalized) |
+            tbl.name.equals(name.trim());
+        return exceptId == null
+            ? sameName
+            : sameName & tbl.id.isNotValue(exceptId);
+      })
+      ..limit(1);
 
-    return player != null;
+    return await query.getSingleOrNull() != null;
   }
 
   Future<bool> updatePlayer(PlayersCompanion player) {

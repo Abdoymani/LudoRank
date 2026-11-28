@@ -19,6 +19,9 @@ extension TournamentStatusExtension on TournamentStatus {
 
       case TournamentStatus.cancelled:
         return "ملغاة";
+
+      case TournamentStatus.unknown:
+        return "غير معروفة";
     }
   }
 
@@ -38,6 +41,9 @@ extension TournamentStatusExtension on TournamentStatus {
 
       case TournamentStatus.cancelled:
         return Colors.red;
+
+      case TournamentStatus.unknown:
+        return Colors.blueGrey;
     }
   }
 
@@ -57,6 +63,9 @@ extension TournamentStatusExtension on TournamentStatus {
 
       case TournamentStatus.cancelled:
         return Icons.cancel;
+
+      case TournamentStatus.unknown:
+        return Icons.help_outline;
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:ludo_rank/core/database/database.dart';
 
 import '../../domain/entities/player.dart' as entity;
+import '../../domain/services/player_name_normalizer.dart';
 
 import 'package:ludo_rank/core/database/database.dart' as db;
 
@@ -48,6 +49,7 @@ class PlayerModel extends entity.Player {
     return PlayersCompanion(
       id: Value(id),
       name: Value(name),
+      normalizedName: Value(normalizePlayerName(name)),
       nickname: Value(nickname),
       avatar: Value(avatar),
       notes: Value(notes),

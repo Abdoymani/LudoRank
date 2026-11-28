@@ -192,6 +192,94 @@ void main() {
       expect(positions['p3'], 3);
     });
 
+    test('orders tied points by wins, then best rank, then name, while '
+        'they keep the same position', () {
+      // Every player ends on 4 points.
+      final standings = calculator.calculate(
+        participantIds: ['id-z', 'id-y', 'id-x', 'id-w', 'id-v'],
+        playerNames: const {
+          'id-z': 'Zeina',
+          'id-y': 'yasser',
+          'id-x': 'Adel',
+          'id-w': 'Bassem',
+          'id-v': 'Camilia',
+        },
+        matches: [
+          for (var i = 1; i <= 6; i++) makeMatch('m$i', MatchStatus.finished),
+        ],
+        matchPlayers: [
+          // Zeina: one win (4 = 4 points, rank 1).
+          makeResult(
+            id: 'a',
+            matchId: 'm1',
+            playerId: 'id-z',
+            points: 4,
+            rank: 1,
+          ),
+          // yasser: two wins (2 + 2).
+          makeResult(
+            id: 'b',
+            matchId: 'm2',
+            playerId: 'id-y',
+            points: 2,
+            rank: 1,
+          ),
+          makeResult(
+            id: 'c',
+            matchId: 'm3',
+            playerId: 'id-y',
+            points: 2,
+            rank: 1,
+          ),
+          // Adel, Bassem: no win, best rank 2.
+          makeResult(
+            id: 'd',
+            matchId: 'm4',
+            playerId: 'id-x',
+            points: 4,
+            rank: 2,
+          ),
+          makeResult(
+            id: 'e',
+            matchId: 'm5',
+            playerId: 'id-w',
+            points: 4,
+            rank: 2,
+          ),
+          // Camilia: no win, best rank 3.
+          makeResult(
+            id: 'f',
+            matchId: 'm6',
+            playerId: 'id-v',
+            points: 4,
+            rank: 3,
+          ),
+        ],
+      );
+
+      expect(standings.map((s) => s.playerId), [
+        'id-y', // 2 wins
+        'id-z', // 1 win
+        'id-x', // best rank 2, "Adel"
+        'id-w', // best rank 2, "Bassem"
+        'id-v', // best rank 3
+      ]);
+      expect(standings.every((s) => s.position == 1), isTrue);
+    });
+
+    test('a player without any rank comes after ranked players on equal '
+        'points', () {
+      final standings = calculator.calculate(
+        participantIds: ['a', 'b'],
+        playerNames: const {'a': 'Aaa', 'b': 'Bbb'},
+        matches: [makeMatch('m1', MatchStatus.finished)],
+        matchPlayers: [
+          makeResult(id: 'r', matchId: 'm1', playerId: 'b', points: 0, rank: 2),
+        ],
+      );
+      expect(standings.map((s) => s.playerId), ['b', 'a']);
+    });
+
     test('does not count duplicate player entries twice', () {
       final standings = calculator.calculate(
         participantIds: ['p1'],

@@ -62,15 +62,16 @@ void main() {
     });
 
     test('accepts a valid playing state', () {
+      // A six earns another roll, so playing starts on the non-six.
       final state = _state(
         phase: TurnPhase.playing,
         rolls: const [
-          DiceRoll(value: 3, sequence: 1),
-          DiceRoll(value: 6, sequence: 2),
+          DiceRoll(value: 6, sequence: 1),
+          DiceRoll(value: 3, sequence: 2),
         ],
         availableRolls: const [
-          DiceRoll(value: 3, sequence: 1),
-          DiceRoll(value: 6, sequence: 2),
+          DiceRoll(value: 6, sequence: 1),
+          DiceRoll(value: 3, sequence: 2),
         ],
         sixRollCount: 1,
       );

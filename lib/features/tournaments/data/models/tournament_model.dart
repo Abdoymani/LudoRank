@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:ludo_rank/core/database/database.dart' as db;
 import 'package:ludo_rank/features/tournaments/domain/entities/tournament.dart';
@@ -17,11 +18,23 @@ class TournamentModel extends Tournament {
     return TournamentModel(
       id: row.id,
       name: row.name,
-      status: TournamentStatus.values.firstWhere((e) => e.name == row.status),
+      status: parseStatus(row.status),
       rounds: row.rounds,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     );
+  }
+
+  /// Unknown stored values become [TournamentStatus.unknown] instead of
+  /// crashing the screen.
+  static TournamentStatus parseStatus(String value) {
+    for (final status in TournamentStatus.values) {
+      if (status != TournamentStatus.unknown && status.name == value) {
+        return status;
+      }
+    }
+    debugPrint('Unknown tournament status "$value"; shown as unknown.');
+    return TournamentStatus.unknown;
   }
 
   factory TournamentModel.fromEntity(Tournament entity) {
@@ -36,6 +49,10 @@ class TournamentModel extends Tournament {
   }
 
   db.TournamentsCompanion toCompanion() {
+    if (status == TournamentStatus.unknown) {
+      throw StateError('لا يمكن حفظ بطولة حالتها غير معروفة.');
+    }
+
     return db.TournamentsCompanion(
       id: Value(id),
       name: Value(name),

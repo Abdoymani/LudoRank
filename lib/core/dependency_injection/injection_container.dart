@@ -8,6 +8,9 @@ import 'package:ludo_rank/features/matches/domain/Use-cases/cancel_match.dart';
 import 'package:ludo_rank/features/tournaments/domain/services/tournament_lifecycle_service.dart';
 
 import 'package:ludo_rank/core/database/database.dart';
+import 'package:ludo_rank/core/database/database_checkpointer.dart';
+import 'package:ludo_rank/features/backup/data/data_export_service.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:ludo_rank/features/home/data/data_sources/local/home_dao.dart';
 import 'package:ludo_rank/features/home/data/repositories/home_repository_impl.dart';
 import 'package:ludo_rank/features/home/domain/repositories/home_repository.dart';
@@ -36,8 +39,6 @@ import 'package:ludo_rank/features/tournaments/data/repositories/tournament_repo
 import 'package:ludo_rank/features/tournaments/data/data_sources/local/tournament_dao.dart';
 
 import 'package:ludo_rank/features/tournaments/domain/repositories/tournament_repository.dart';
-import 'package:ludo_rank/features/tournaments/domain/services/tournament_validator.dart';
-import 'package:ludo_rank/features/tournaments/domain/Use-cases/continue_tournament.dart';
 import 'package:ludo_rank/features/tournaments/presentation/providers/tournament_provider.dart';
 
 // Tournament Players.
@@ -70,13 +71,21 @@ Future<void> initDependencies() async {
   // Database
 
   sl.registerLazySingleton<AppDatabase>(() => AppDatabase());
+  sl.registerLazySingleton<DatabaseCheckpointer>(
+    () => DatabaseCheckpointer(() => sl<AppDatabase>().checkpointWal()),
+  );
+  sl.registerLazySingleton<DataExportService>(
+    () => DataExportService(
+      database: sl<AppDatabase>(),
+      waitForPendingSaves: sl<DatabaseCheckpointer>().waitForPendingSaves,
+      outputDirectory: getTemporaryDirectory,
+    ),
+  );
 
   // UseCase
   sl.registerLazySingleton<GetDashboard>(
     () => GetDashboard(sl<HomeRepository>()),
   );
-
-  sl.registerLazySingleton(() => ContinueTournament(sl(), sl(), sl()));
 
   // DAO
 
@@ -109,6 +118,7 @@ Future<void> initDependencies() async {
       matchRepository: sl<MatchRepository>(),
       matchPlayerRepository: sl<MatchPlayerRepository>(),
       tournamentLifecycle: sl<TournamentLifecycleService>(),
+      tournamentPlayerRepository: sl<TournamentPlayerRepository>(),
       transactionRunner: DriftTransactionRunner(sl<AppDatabase>()),
     ),
   );
@@ -139,6 +149,7 @@ Future<void> initDependencies() async {
       matchRepository: sl<MatchRepository>(),
       matchPlayerRepository: sl<MatchPlayerRepository>(),
       gameStateRepository: sl<MatchGameStateRepository>(),
+      transactionRunner: DriftTransactionRunner(sl<AppDatabase>()),
     ),
   );
 
@@ -186,11 +197,9 @@ Future<void> initDependencies() async {
       service: sl<MatchGameService>(),
       sounds: sl<SoundController>(),
       autoMoveDelay: const Duration(milliseconds: 450),
+      checkpointer: sl<DatabaseCheckpointer>(),
     ),
   );
-
-  // Validator
-  sl.registerLazySingleton<TournamentValidator>(() => TournamentValidator());
 
   //standings_service
 

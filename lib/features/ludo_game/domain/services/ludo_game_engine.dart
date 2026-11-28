@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../constants/ludo_paths.dart';
 import '../constants/safe_cells.dart';
 import '../entities/ludo_player.dart';
@@ -69,9 +71,11 @@ class LudoGameEngine {
   /// to grant the capture bonus roll.
   bool _lastMoveWasCapture = false;
 
+  /// [random] is for tests (a seeded Random gives repeatable dice).
+  /// The app uses the platform's cryptographic generator.
   LudoGameEngine({required LudoGameState initialState, Random? random})
     : _state = initialState,
-      _random = random ?? Random();
+      _random = random ?? Random.secure();
 
   // ============================================================
   // GETTERS
@@ -135,29 +139,6 @@ class LudoGameEngine {
   }
 
   // ============================================================
-  // TURN
-  // ============================================================
-
-  /// Starts or resets the current player's turn.
-  LudoGameState startTurn() {
-    if (!_state.isStarted || _state.isFinished) {
-      return _state;
-    }
-
-    if (_state.currentPlayerFinished) {
-      return _moveToNextPlayer();
-    }
-
-    final player = _state.currentPlayer;
-
-    _lastMoveWasCapture = false;
-
-    _state = _state.copyWith(turnState: TurnState.initial(player.playerId));
-
-    return _state;
-  }
-
-  // ============================================================
   // DICE
   // ============================================================
 
@@ -208,7 +189,9 @@ class LudoGameEngine {
 
   /// Registers a deterministic dice roll.
   ///
-  /// Mainly useful for tests and debugging.
+  /// For tests only: it accepts any value, so the app must roll through
+  /// [rollDice].
+  @visibleForTesting
   List<MoveOption> registerDiceRoll({
     required int value,
     required int sequence,
@@ -575,8 +558,7 @@ class LudoGameEngine {
 
     final isMovableState =
         token.state == LudoTokenState.normal ||
-        token.state == LudoTokenState.safe ||
-        token.state == LudoTokenState.safeInPair;
+        token.state == LudoTokenState.safe;
 
     if (!isMovableState) {
       return null;

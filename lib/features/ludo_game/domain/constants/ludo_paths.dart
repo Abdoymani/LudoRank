@@ -73,23 +73,6 @@ class LudoPath {
   // PATH VIEWS
   // ============================================================
 
-  /// Main-loop path used when Home Lane is not active.
-  List<Position> get beforeCapture => mainLoopPath;
-
-  /// Full logical path used when Home Lane is active.
-  ///
-  /// In this view:
-  /// - 0..50  = Main Loop
-  /// - 51..55 = Home Lane
-  /// - 56     = Finish
-  ///
-  /// This view intentionally omits mainLoopPath[51], because
-  /// logical Step 51 is interpreted as the Home Lane entry.
-  List<Position> get afterCapture => [
-    ...mainLoopPath.take(lastMainLoopStep),
-    ...homePath,
-  ];
-
   /// Number of logical positions in the complete path.
   ///
   /// IMPORTANT:
@@ -214,20 +197,12 @@ class LudoPath {
   // STEP CLASSIFICATION
   // ============================================================
 
-  bool isMainLoopStep(int step) {
-    return step >= 0 && step <= lastMainLoopStep;
-  }
-
   bool isHomeLaneStep(int step) {
     return step >= homeLaneStartStep && step <= homeLaneLastStep;
   }
 
   bool isFinishStep(int step) {
     return step == finishStep;
-  }
-
-  bool isStartingStep(int step) {
-    return const {0, 13, 26, 39}.contains(step);
   }
 
   // ============================================================

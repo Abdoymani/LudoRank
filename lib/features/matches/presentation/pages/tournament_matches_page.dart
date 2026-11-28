@@ -228,6 +228,8 @@ class _TournamentMatchesPageState extends State<TournamentMatchesPage> {
         MatchStatus.finished => 'هذه المباراة منتهية بالفعل.',
         MatchStatus.cancelled => 'هذه المباراة ملغاة.',
         MatchStatus.pending => 'المباراة لم تبدأ بعد.',
+        MatchStatus.unknown =>
+          'حالة هذه المباراة غير معروفة، لا يمكن فتحها من هذا الإصدار.',
       };
 
       ScaffoldMessenger.of(context)
@@ -726,6 +728,9 @@ class _MatchStatusChip extends StatelessWidget {
 
       case MatchStatus.cancelled:
         return 'ملغاة';
+
+      case MatchStatus.unknown:
+        return 'غير معروفة';
     }
   }
 }
