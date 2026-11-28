@@ -47,11 +47,7 @@ void main() {
     await app.pump(tester, location: '${AppRoutes.tournaments}/$tournamentId');
     await tester.pumpAndSettle();
     await tester.tap(
-      find.byWidgetPredicate(
-        (w) =>
-            w is Text &&
-            (w.data == 'استكمال البطولة' || w.data == 'عرض المباريات'),
-      ),
+      find.byWidgetPredicate((w) => w is Text && w.data == 'المباريات'),
     );
     await tester.pumpAndSettle();
     expect(find.byType(TournamentMatchesPage), findsOneWidget);

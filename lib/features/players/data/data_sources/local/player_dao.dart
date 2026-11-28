@@ -14,6 +14,26 @@ class PlayerDao extends DatabaseAccessor<AppDatabase> with _$PlayerDaoMixin {
     return select(players).get();
   }
 
+  /// (matches, wins, points) per player over finished matches.
+  Future<Map<String, ({int matches, int wins, int points})>>
+  getPlayerStats() async {
+    final rows = await customSelect(
+      'SELECT mp.player_id AS player_id, COUNT(*) AS matches, '
+      'SUM(CASE WHEN mp.rank = 1 THEN 1 ELSE 0 END) AS wins, '
+      'SUM(mp.points) AS points '
+      'FROM match_players mp JOIN matches m ON m.id = mp.match_id '
+      "WHERE m.status = 'finished' GROUP BY mp.player_id",
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<String>('player_id'): (
+          matches: row.read<int>('matches'),
+          wins: row.read<int>('wins'),
+          points: row.read<int>('points'),
+        ),
+    };
+  }
+
   Future<Player?> getPlayerById(String id) {
     return (select(
       players,

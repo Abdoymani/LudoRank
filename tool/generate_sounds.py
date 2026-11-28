@@ -71,9 +71,25 @@ def silence(d):
     return np.zeros(int(SR * d))
 
 
+def _wood_tap(freq, seed):
+    # a soft, short wooden tap: a low-mid body with an inharmonic wood
+    # partial, a very short filtered click on top, quick decay
+    own = np.random.default_rng(seed)
+    body = tone(freq, 0.07, 65, ((1, 1.0), (2.32, 0.18), (3.9, 0.05)), 0.002)
+    n = own.standard_normal(int(SR * 0.012))
+    click = np.convolve(n, np.ones(6) / 6, mode='same') * env(len(n), 0.0005, 300)
+    return mix(body, 0.25 * click)
+
+
 def step():
-    # soft wooden "tok" of a token landing on a square
-    return mix(0.7 * tone(620, 0.09, 55, ((1, 1.0), (2.7, 0.25))), 0.35 * noise(0.09, 70, 0.25))
+    # a token landing on a square; two pitches alternate per square so a
+    # long move sounds like steps, not a machine-gun click
+    noise(0.09, 70, 0.25)  # keeps the shared rng where the other sounds expect it
+    return _wood_tap(430, 101)
+
+
+def step_alt():
+    return _wood_tap(490, 202)
 
 
 def dice():
@@ -183,6 +199,7 @@ SOUNDS = {
     'win': (win, 22050),
     'return': (token_return, 44100),
     'reveal': (reveal, 44100),
+    'step2': (step_alt, 22050),
 }
 
 

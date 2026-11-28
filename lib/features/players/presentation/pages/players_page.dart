@@ -80,15 +80,35 @@ class _PlayersPageState extends State<PlayersPage> {
       },
       itemBuilder: (context, index) {
         final Player player = provider.players[index];
+        final stats = provider.statsFor(player.id);
+        final nickname = player.nickname;
+        final details = <String>[
+          if (nickname != null && nickname.isNotEmpty) nickname,
+          stats.matches == 0
+              ? 'لسه ملعبش مباريات'
+              : '${stats.matches} مباراة • ${stats.wins} فوز • '
+                    '${stats.points} نقطة',
+        ];
 
         return Card(
+          key: ValueKey(player.id),
           child: ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person)),
-            title: Text(player.name),
-            subtitle: Text(player.nickname ?? ""),
-            trailing: player.isActive
-                ? const Icon(Icons.check_circle, color: Colors.green)
-                : const Icon(Icons.cancel, color: Colors.red),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => AddPlayerDialog(player: player),
+            ),
+            leading: CircleAvatar(
+              child: Text(
+                player.name.characters.first.toUpperCase(),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            title: Text(
+              player.name,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(details.join('  •  ')),
+            trailing: const Icon(Icons.edit_outlined, size: 20),
           ),
         );
       },

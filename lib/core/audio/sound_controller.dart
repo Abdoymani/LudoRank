@@ -86,7 +86,9 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
   /// so all of their players are loaded up front.
   @visibleForTesting
   static int preloadedPlayersFor(GameSound sound) {
-    return sound == GameSound.step ? _playersPerSound : 1;
+    return sound == GameSound.step || sound == GameSound.stepAlt
+        ? _playersPerSound
+        : 1;
   }
 
   /// Loads every sound once (asset copy + native decode), so the first roll
@@ -145,7 +147,9 @@ class SoundController extends ChangeNotifier implements GameSoundPlayer {
       if (!_enabled || _disposed) return;
       // Low-latency players never report completion, so always stop first:
       // it rewinds the loaded sound and lets resume() start a fresh stream.
-      await player.stop();
+      // Both calls go out at once (platform calls keep their order), so
+      // the sound starts without waiting for a round trip in between.
+      unawaited(player.stop());
       await player.resume();
     } catch (error) {
       // Sound is never allowed to break the game.

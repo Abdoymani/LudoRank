@@ -6,8 +6,11 @@ import 'package:uuid/uuid.dart';
 import 'package:ludo_rank/features/players/domain/entities/player.dart';
 import 'package:ludo_rank/features/players/presentation/providers/player_provider.dart';
 
+/// Adds a player, or edits [player] (name, nickname, notes) when given.
 class AddPlayerDialog extends StatefulWidget {
-  const AddPlayerDialog({super.key});
+  final Player? player;
+
+  const AddPlayerDialog({super.key, this.player});
 
   @override
   State<AddPlayerDialog> createState() => _AddPlayerDialogState();
@@ -16,9 +19,15 @@ class AddPlayerDialog extends StatefulWidget {
 class _AddPlayerDialogState extends State<AddPlayerDialog> {
   final _formKey = GlobalKey<FormState>();
 
-  final _nameController = TextEditingController();
-  final _nicknameController = TextEditingController();
-  final _notesController = TextEditingController();
+  late final _nameController = TextEditingController(text: widget.player?.name);
+  late final _nicknameController = TextEditingController(
+    text: widget.player?.nickname,
+  );
+  late final _notesController = TextEditingController(
+    text: widget.player?.notes,
+  );
+
+  bool get _editing => widget.player != null;
 
   /// Shown under the name field when the name is already taken.
   String? _nameError;
@@ -41,24 +50,30 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
 
     final provider = context.read<PlayerProvider>();
 
+    final existing = widget.player;
+    final now = DateTime.now();
     final player = Player(
-      id: const Uuid().v4(),
+      id: existing?.id ?? const Uuid().v4(),
       name: _nameController.text.trim(),
       nickname: _nicknameController.text.trim().isEmpty
           ? null
           : _nicknameController.text.trim(),
-      avatar: null,
+      avatar: existing?.avatar,
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
+      isActive: existing?.isActive ?? true,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
     );
 
     setState(() => _saving = true);
     try {
-      await provider.addPlayer(player);
+      if (_editing) {
+        await provider.updatePlayer(player);
+      } else {
+        await provider.addPlayer(player);
+      }
 
       if (!mounted) return;
 
@@ -72,7 +87,13 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر إضافة اللاعب، حاول مرة أخرى')),
+        SnackBar(
+          content: Text(
+            _editing
+                ? 'تعذر حفظ اللاعب، حاول مرة أخرى'
+                : 'تعذر إضافة اللاعب، حاول مرة أخرى',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -82,7 +103,7 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('إضافة لاعب'),
+      title: Text(_editing ? 'تعديل اللاعب' : 'إضافة لاعب'),
 
       content: Form(
         key: _formKey,
@@ -92,7 +113,7 @@ class _AddPlayerDialogState extends State<AddPlayerDialog> {
             children: [
               TextFormField(
                 controller: _nameController,
-                autofocus: true,
+                autofocus: !_editing,
                 maxLength: Player.maxNameLength,
                 decoration: const InputDecoration(
                   labelText: 'اسم اللاعب',

@@ -5,6 +5,7 @@ import 'package:ludo_rank/app/app_provider.dart';
 import 'package:ludo_rank/app/app_router.dart';
 import 'package:ludo_rank/app/theme_controller.dart';
 import 'package:ludo_rank/core/theme/app_theme.dart';
+import 'package:ludo_rank/core/ui/system_bars.dart';
 
 class LudoRankApp extends StatelessWidget {
   const LudoRankApp({super.key});
@@ -25,6 +26,10 @@ class LudoRankApp extends StatelessWidget {
 
             // Current Theme Mode
             themeMode: themeController.themeMode,
+
+            // Android's bars follow the app's colours (no grey bar).
+            builder: (context, child) =>
+                AppSystemBars(child: child ?? const SizedBox.shrink()),
           );
         },
       ),

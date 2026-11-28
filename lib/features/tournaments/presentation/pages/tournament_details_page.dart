@@ -393,12 +393,9 @@ class _TournamentDetailsPageState extends State<TournamentDetailsPage> {
         Expanded(
           child: FilledButton.icon(
             onPressed: _openMatches,
-            icon: Icon(
-              isOpen ? Icons.play_arrow_rounded : Icons.list_alt_rounded,
-              size: 21,
-            ),
+            icon: const Icon(Icons.sports_esports_rounded, size: 21),
             label: Text(
-              isOpen ? 'استكمال البطولة' : 'عرض المباريات',
+              'المباريات',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

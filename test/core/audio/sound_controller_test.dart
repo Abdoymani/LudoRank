@@ -85,6 +85,7 @@ void main() {
 
     test('preload loads every step player, one player for other sounds', () {
       expect(SoundController.preloadedPlayersFor(GameSound.step), 3);
+      expect(SoundController.preloadedPlayersFor(GameSound.stepAlt), 3);
       expect(SoundController.preloadedPlayersFor(GameSound.dice), 1);
     });
 

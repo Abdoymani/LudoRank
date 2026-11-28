@@ -170,14 +170,17 @@ void main() {
       );
     });
 
-    test('a plain step has no extra sound', () {
+    test('a plain move lands with a step', () {
       final engine = _captureEngine();
       engine.registerDiceRoll(value: 2, sequence: 1);
       final before = engine.state;
       const move = MoveToken(tokenId: 'a-token-0', steps: 2, rollSequence: 1);
       engine.executeMove(move);
 
-      expect(GameSoundEvents.forMove(before, engine.state, move), isNull);
+      expect(
+        GameSoundEvents.forMove(before, engine.state, move),
+        GameSound.step,
+      );
     });
   });
 }

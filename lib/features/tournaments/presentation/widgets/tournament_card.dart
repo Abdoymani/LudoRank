@@ -50,28 +50,30 @@ class TournamentCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 16,
-                runSpacing: 6,
+              // The whole card opens the tournament; the chevron says so.
+              Row(
                 children: [
-                  _CountLabel(
-                    icon: Icons.people_alt_rounded,
-                    text: '${counts.players} لاعب',
+                  Expanded(
+                    child: Wrap(
+                      spacing: 16,
+                      runSpacing: 6,
+                      children: [
+                        _CountLabel(
+                          icon: Icons.people_alt_rounded,
+                          text: '${counts.players} لاعب',
+                        ),
+                        _CountLabel(
+                          icon: Icons.sports_esports_rounded,
+                          text: '${counts.matches} مباراة',
+                        ),
+                      ],
+                    ),
                   ),
-                  _CountLabel(
-                    icon: Icons.sports_esports_rounded,
-                    text: '${counts.matches} مباراة',
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: TextButton.icon(
-                  onPressed: onTap,
-                  icon: const Icon(Icons.arrow_forward_rounded),
-                  label: const Text('فتح'),
-                ),
               ),
             ],
           ),

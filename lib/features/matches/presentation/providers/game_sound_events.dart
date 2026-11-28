@@ -37,11 +37,15 @@ class GameSoundEvents {
     };
   }
 
-  /// The single most important sound for an executed move
-  /// (step sounds are played by the board animation itself).
+  /// The single sound for the moment an executed move lands.
   ///
-  /// Priority: match/player finished > capture > token home > token entered.
-  static GameSound? forMove(
+  /// The board animation plays a step for every square on the way; the
+  /// last landing is this sound instead, so a step never stacks on top of
+  /// the event sound.
+  ///
+  /// Priority: match/player finished > capture > token home > token
+  /// entered > a plain step.
+  static GameSound forMove(
     LudoGameState before,
     LudoGameState after,
     MoveOption move,
@@ -84,6 +88,6 @@ class GameSoundEvents {
     if (captured) return GameSound.capture;
     if (reachedHome) return GameSound.home;
     if (move is ExitToken) return GameSound.enter;
-    return null;
+    return GameSound.step;
   }
 }
